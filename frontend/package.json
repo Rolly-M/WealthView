@@ -39,7 +39,9 @@
     "class-variance-authority": "^0.7.0",
     "@supabase/supabase-js": "^2.45.0",
     "@supabase/ssr": "^0.5.0",
-    "@anthropic-ai/sdk": "^0.36.0"
+    "@anthropic-ai/sdk": "^0.36.0",
+    "plaid": "^24.0.0",
+    "react-plaid-link": "^3.5.0"
   },
   "devDependencies": {
     "eslint": "^8.57.0",

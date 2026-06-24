@@ -1,12 +1,86 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Trash2, Link2, UserPlus, Shield, Bell, Eye, EyeOff } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building2 } from "lucide-react";
 import { accountsApi, householdsApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { Account, Household } from "@/types";
+import { usePlaidLink } from "react-plaid-link";
 
+// ─── Plaid Link button ────────────────────────────────────────────────────────
+function PlaidLinkButton({ onSuccess }: { onSuccess: () => void }) {
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/plaid/link-token", { method: "POST" })
+      .then((r) => r.json())
+      .then((d) => setLinkToken(d.link_token))
+      .catch(() => {});
+  }, []);
+
+  const { open, ready } = usePlaidLink({
+    token: linkToken ?? "",
+    onSuccess: async (publicToken) => {
+      setLoading(true);
+      try {
+        await fetch("/api/plaid/exchange-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ public_token: publicToken }),
+        });
+        onSuccess();
+      } finally {
+        setLoading(false);
+      }
+    },
+  });
+
+  return (
+    <button
+      onClick={() => open()}
+      disabled={!ready || loading}
+      className="btn-primary text-xs py-2"
+    >
+      <Building2 size={13} />
+      {loading ? "Connecting…" : "Connect bank account"}
+    </button>
+  );
+}
+
+// ─── Sync button ──────────────────────────────────────────────────────────────
+function SyncButton({ onSync }: { onSync: () => void }) {
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState("");
+
+  async function sync() {
+    setSyncing(true);
+    setResult("");
+    try {
+      const res = await fetch("/api/plaid/sync", { method: "POST" });
+      const d = await res.json();
+      setResult(`Synced ${d.synced} transactions`);
+      onSync();
+    } catch {
+      setResult("Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {result && <span className="text-xs text-gray-400">{result}</span>}
+      <button onClick={sync} disabled={syncing} className="btn-secondary text-xs py-2">
+        <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
+        {syncing ? "Syncing…" : "Sync now"}
+      </button>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore();
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -17,9 +91,7 @@ export default function SettingsPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteStatus, setInviteStatus] = useState("");
 
-  useEffect(() => { load(); }, []);
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [acctRes, hhRes] = await Promise.allSettled([
@@ -31,12 +103,9 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function linkDemoAccounts() {
-    await accountsApi.link({ provider: "mock" });
-    load();
-  }
+  useEffect(() => { load(); }, [load]);
 
   async function toggleShared(account: Account) {
     await accountsApi.update(account.id, { is_shared: !account.is_shared });
@@ -58,8 +127,8 @@ export default function SettingsPage() {
       setInviteStatus(`Invitation sent to ${inviteEmail}`);
       setInviteEmail("");
       load();
-    } catch (err: any) {
-      setInviteStatus("Failed to send invite: " + (err.response?.data?.detail ?? "Unknown error"));
+    } catch (err: unknown) {
+      setInviteStatus("Failed: " + ((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Unknown error"));
     } finally {
       setInviting(false);
     }
@@ -72,6 +141,9 @@ export default function SettingsPage() {
     { key: "privacy", label: "Privacy", icon: Eye },
   ] as const;
 
+  const plaidAccounts = accounts.filter((a) => a.provider === "plaid");
+  const hasSomeAccounts = accounts.length > 0;
+
   return (
     <div className="space-y-6 animate-slide-in max-w-3xl">
       <div>
@@ -79,12 +151,11 @@ export default function SettingsPage() {
         <p className="text-sm text-gray-500 mt-1">Manage accounts, household, and privacy</p>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
-            onClick={() => setTab(key as any)}
+            onClick={() => setTab(key as typeof tab)}
             className={cn(
               "flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all",
               tab === key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
@@ -95,24 +166,24 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {/* Accounts */}
+      {/* ── Accounts ── */}
       {tab === "accounts" && (
         <div className="space-y-4">
           <div className="card">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-900">Linked Accounts</h2>
-              <button onClick={linkDemoAccounts} className="btn-primary text-xs py-2">
-                <Plus size={13} /> Link demo accounts
-              </button>
+              <h2 className="font-semibold text-gray-900">Connected Banks</h2>
+              <div className="flex items-center gap-2">
+                {plaidAccounts.length > 0 && <SyncButton onSync={load} />}
+                <PlaidLinkButton onSuccess={load} />
+              </div>
             </div>
 
-            {accounts.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <Link2 size={32} className="mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No accounts linked</p>
-                <button onClick={linkDemoAccounts} className="btn-primary text-xs mt-3">
-                  <Plus size={13} /> Link demo bank accounts
-                </button>
+            {!hasSomeAccounts ? (
+              <div className="text-center py-10 text-gray-400">
+                <Building2 size={36} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-medium text-gray-500 mb-1">No bank accounts connected</p>
+                <p className="text-xs mb-4">Connect your bank to start tracking transactions automatically.</p>
+                <PlaidLinkButton onSuccess={load} />
               </div>
             ) : (
               <div className="space-y-2">
@@ -127,11 +198,12 @@ export default function SettingsPage() {
                           acc.type === "savings" ? "bg-emerald-100 text-emerald-700" :
                           acc.type === "credit" ? "bg-amber-100 text-amber-700" :
                           "bg-gray-100 text-gray-600"
-                        )}>
-                          {acc.type}
-                        </span>
+                        )}>{acc.type}</span>
+                        {acc.provider === "plaid" && (
+                          <span className="badge bg-teal-50 text-teal-700 text-[10px]">Live</span>
+                        )}
                       </div>
-                      <p className="text-xs text-gray-400">{acc.institution?.name} · {formatCurrency(Math.abs(acc.current_balance))}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(Math.abs(acc.current_balance))}</p>
                     </div>
                     <button
                       onClick={() => toggleShared(acc)}
@@ -139,7 +211,6 @@ export default function SettingsPage() {
                         "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
                         acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
                       )}
-                      title={acc.is_shared ? "Shared with partner" : "Private"}
                     >
                       {acc.is_shared ? <><Eye size={12} />Shared</> : <><EyeOff size={12} />Private</>}
                     </button>
@@ -156,22 +227,26 @@ export default function SettingsPage() {
 
             <p className="text-xs text-gray-400 mt-3">
               <Shield size={11} className="inline mr-1" />
-              All bank connections are read-only. We never store your banking credentials.
+              Bank connections are read-only via Plaid. We never store your banking credentials.
             </p>
           </div>
         </div>
       )}
 
-      {/* Household */}
+      {/* ── Household ── */}
       {tab === "household" && (
         <div className="space-y-4">
-          {household && (
+          {loading ? (
             <div className="card">
-              <h2 className="font-semibold text-gray-900 mb-4">
-                {household.name}
-              </h2>
+              <div className="shimmer h-32 rounded-xl" />
+            </div>
+          ) : household ? (
+            <div className="card">
+              <h2 className="font-semibold text-gray-900 mb-4">{household.name}</h2>
+
+              {/* Members */}
               <div className="space-y-2 mb-6">
-                {household.members.map((m) => (
+                {(household.members ?? []).map((m) => (
                   <div key={m.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
                     <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold">
                       {m.user.full_name.slice(0, 2).toUpperCase()}
@@ -183,9 +258,7 @@ export default function SettingsPage() {
                     <span className={cn(
                       "badge capitalize",
                       m.role === "owner" ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-600"
-                    )}>
-                      {m.role}
-                    </span>
+                    )}>{m.role}</span>
                   </div>
                 ))}
               </div>
@@ -216,12 +289,12 @@ export default function SettingsPage() {
                   </button>
                 </form>
                 <p className="text-xs text-gray-400 mt-2">
-                  They'll receive a link valid for 7 days to create their account and join your household.
+                  They&apos;ll get a link valid for 7 days to join your household with their own login.
                 </p>
               </div>
 
-              {/* Pending invitations */}
-              {household.pending_invitations.length > 0 && (
+              {/* Pending */}
+              {(household.pending_invitations ?? []).length > 0 && (
                 <div className="mt-4 border-t border-gray-100 pt-4">
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">Pending invitations</h3>
                   {household.pending_invitations.map((inv) => (
@@ -233,36 +306,33 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+          ) : (
+            <div className="card text-center text-gray-400 py-8">
+              <p className="text-sm">No household found. Please reload the page.</p>
+            </div>
           )}
         </div>
       )}
 
-      {/* Profile */}
-      {tab === "profile" && (
-        <ProfileTab />
-      )}
+      {/* ── Profile ── */}
+      {tab === "profile" && <ProfileTab user={user} setUser={setUser} />}
 
-      {/* Privacy */}
+      {/* ── Privacy ── */}
       {tab === "privacy" && (
         <div className="card space-y-4">
           <h2 className="font-semibold text-gray-900">Privacy Controls</h2>
           <div className="space-y-3 text-sm text-gray-600">
-            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-              <p className="font-medium text-gray-900 mb-1">Account visibility</p>
-              <p className="text-xs text-gray-500">Control which accounts your partner can see. Toggle visibility per-account in the Accounts tab.</p>
-            </div>
-            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-              <p className="font-medium text-gray-900 mb-1">Read-only bank access</p>
-              <p className="text-xs text-gray-500">WealthView Duo only requests read access to your transactions and balances. No payment or transfer capabilities.</p>
-            </div>
-            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-              <p className="font-medium text-gray-900 mb-1">Data export</p>
-              <p className="text-xs text-gray-500">You can export all your data at any time. Contact support to request a data export.</p>
-            </div>
-            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-              <p className="font-medium text-gray-900 mb-1">Account deletion</p>
-              <p className="text-xs text-gray-500">Deleting your account permanently removes all your data and disconnects all bank accounts.</p>
-            </div>
+            {[
+              { title: "Account visibility", body: "Control which accounts your partner can see. Toggle per-account in the Accounts tab." },
+              { title: "Read-only bank access", body: "WealthView Duo requests read-only access via Plaid. No payment or transfer capabilities." },
+              { title: "Data export", body: "You can export all your data at any time. Contact support to request a data export." },
+              { title: "Account deletion", body: "Deleting your account permanently removes all data and disconnects all bank accounts." },
+            ].map(({ title, body }) => (
+              <div key={title} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                <p className="font-medium text-gray-900 mb-1">{title}</p>
+                <p className="text-xs text-gray-500">{body}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -270,8 +340,7 @@ export default function SettingsPage() {
   );
 }
 
-function ProfileTab() {
-  const { user, setUser } = useAuthStore();
+function ProfileTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>["user"]; setUser: (u: ReturnType<typeof useAuthStore>["user"]) => void }) {
   const [name, setName] = useState(user?.full_name ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -300,7 +369,7 @@ function ProfileTab() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
           <input className="input bg-gray-50 text-gray-500 cursor-not-allowed" value={user?.email ?? ""} disabled />
-          <p className="text-xs text-gray-400 mt-1">Email cannot be changed</p>
+          <p className="text-xs text-gray-400 mt-1">Email cannot be changed here</p>
         </div>
         <button type="submit" disabled={saving} className="btn-primary">
           {saved ? "✓ Saved" : saving ? "Saving…" : "Save changes"}

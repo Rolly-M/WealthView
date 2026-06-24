@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
   const supabase = createClient();
@@ -14,27 +15,50 @@ export async function GET() {
 
   if (!membership) return NextResponse.json({ error: "No household found" }, { status: 404 });
 
-  const { data: household } = await supabase
-    .from("households")
-    .select("*")
-    .eq("id", membership.household_id)
-    .single();
+  const [householdRes, membersRes, invitationsRes] = await Promise.all([
+    supabase.from("households").select("*").eq("id", membership.household_id).single(),
+    supabase.from("household_members")
+      .select("id, role, nickname, joined_at, user_id, profiles(id, full_name, avatar_url, currency, locale)")
+      .eq("household_id", membership.household_id),
+    supabase.from("invitations").select("*")
+      .eq("household_id", membership.household_id).eq("status", "pending"),
+  ]);
 
-  const { data: members } = await supabase
-    .from("household_members")
-    .select("id, role, nickname, joined_at, profiles(id, full_name, avatar_url, currency, locale)")
-    .eq("household_id", membership.household_id);
+  // Use admin client to get auth emails for all members
+  const admin = createAdminClient();
+  const memberUserIds = (membersRes.data ?? []).map((m) => m.user_id);
+  const emailMap: Record<string, string> = {};
+  for (const uid of memberUserIds) {
+    const { data } = await admin.auth.admin.getUserById(uid);
+    if (data.user) emailMap[uid] = data.user.email ?? "";
+  }
 
-  const { data: invitations } = await supabase
-    .from("invitations")
-    .select("*")
-    .eq("household_id", membership.household_id)
-    .eq("status", "pending");
+  type ProfileRow = { id: string; full_name: string; avatar_url: string | null; currency: string; locale: string } | null;
+  const members = (membersRes.data ?? []).map((m) => {
+    const profile = m.profiles as ProfileRow;
+    return {
+      id: m.id,
+      role: m.role,
+      nickname: m.nickname,
+      joined_at: m.joined_at,
+      share_all_accounts: true,
+      user: {
+        id: m.user_id,
+        email: emailMap[m.user_id] ?? "",
+        full_name: profile?.full_name ?? "Unknown",
+        avatar_url: profile?.avatar_url ?? null,
+        currency: profile?.currency ?? "USD",
+        locale: profile?.locale ?? "en-US",
+        is_verified: true,
+        created_at: m.joined_at,
+      },
+    };
+  });
 
   return NextResponse.json({
-    ...household,
-    members: members ?? [],
-    pending_invitations: invitations ?? [],
+    ...householdRes.data,
+    members,
+    pending_invitations: invitationsRes.data ?? [],
   });
 }
 
@@ -65,11 +89,7 @@ export async function PATCH(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: membership } = await supabase
-    .from("household_members")
-    .select("household_id, role")
-    .eq("user_id", user.id)
-    .single();
-
+    .from("household_members").select("household_id").eq("user_id", user.id).single();
   if (!membership) return NextResponse.json({ error: "No household" }, { status: 404 });
 
   const body = await req.json();
@@ -77,12 +97,7 @@ export async function PATCH(req: Request) {
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 
   const { data, error } = await supabase
-    .from("households")
-    .update(updates)
-    .eq("id", membership.household_id)
-    .select()
-    .single();
-
+    .from("households").update(updates).eq("id", membership.household_id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json(data);
 }
