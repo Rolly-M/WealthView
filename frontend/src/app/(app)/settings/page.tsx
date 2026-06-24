@@ -9,21 +9,25 @@ import type { Account, Household, User } from "@/types";
 import { usePlaidLink } from "react-plaid-link";
 
 // ─── Plaid Link button ────────────────────────────────────────────────────────
-function PlaidLinkButton({ onSuccess }: { onSuccess: () => void }) {
+function PlaidLinkButton({ onSuccess, variant = "default" }: { onSuccess: () => void; variant?: "default" | "large" }) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     fetch("/api/plaid/link-token", { method: "POST" })
       .then((r) => r.json())
-      .then((d) => setLinkToken(d.link_token))
-      .catch(() => {});
+      .then((d) => {
+        if (d.link_token) setLinkToken(d.link_token);
+        else setFetchError(true);
+      })
+      .catch(() => setFetchError(true));
   }, []);
 
   const { open, ready } = usePlaidLink({
     token: linkToken ?? "",
     onSuccess: async (publicToken) => {
-      setLoading(true);
+      setConnecting(true);
       try {
         await fetch("/api/plaid/exchange-token", {
           method: "POST",
@@ -32,19 +36,29 @@ function PlaidLinkButton({ onSuccess }: { onSuccess: () => void }) {
         });
         onSuccess();
       } finally {
-        setLoading(false);
+        setConnecting(false);
       }
     },
   });
 
+  if (fetchError) {
+    return (
+      <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+        Add <code className="font-mono">PLAID_CLIENT_ID</code>, <code className="font-mono">PLAID_SECRET</code> and <code className="font-mono">PLAID_ENV</code> to Vercel env vars to enable bank connections.
+      </div>
+    );
+  }
+
+  const label = connecting ? "Connecting…" : !ready ? "Loading…" : "Connect bank account";
+
   return (
     <button
       onClick={() => open()}
-      disabled={!ready || loading}
-      className="btn-primary text-xs py-2"
+      disabled={!ready || connecting}
+      className={variant === "large" ? "btn-primary" : "btn-primary text-xs py-2"}
     >
-      <Building2 size={13} />
-      {loading ? "Connecting…" : "Connect bank account"}
+      <Building2 size={variant === "large" ? 16 : 13} />
+      {label}
     </button>
   );
 }
@@ -183,7 +197,7 @@ export default function SettingsPage() {
                 <Building2 size={36} className="mx-auto mb-3 opacity-30" />
                 <p className="text-sm font-medium text-gray-500 mb-1">No bank accounts connected</p>
                 <p className="text-xs mb-4">Connect your bank to start tracking transactions automatically.</p>
-                <PlaidLinkButton onSuccess={load} />
+                <PlaidLinkButton onSuccess={load} variant="large" />
               </div>
             ) : (
               <div className="space-y-2">
