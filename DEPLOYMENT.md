@@ -36,7 +36,7 @@ In the Railway dashboard, add:
 | `FRONTEND_URL` | `https://your-app.vercel.app` |
 | `PLAID_CLIENT_ID` | *(if enabling live banks)* |
 | `PLAID_SECRET` | *(if enabling live banks)* |
-| `OPENAI_API_KEY` | *(if enabling AI chat)* |
+| `ANTHROPIC_API_KEY` | *(required for Claude-powered chat)* |
 
 Railway auto-injects `DATABASE_URL` in postgres:// format. The `config.py` validator converts it to `postgresql+asyncpg://` automatically.
 
@@ -159,5 +159,5 @@ Then update `CORS_ORIGINS` and `NEXT_PUBLIC_API_URL` to use the custom domains.
 |--------|-------------|-----------------|
 | `SECRET_KEY` | Railway + local `.env` | `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `PLAID_SECRET` | Railway | Plaid dashboard → Keys |
-| `OPENAI_API_KEY` | Railway | platform.openai.com → API Keys |
+| `ANTHROPIC_API_KEY` | Vercel | console.anthropic.com → API Keys |
 | `SMTP_PASSWORD` | Railway | Your email provider's app password |

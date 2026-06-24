@@ -10,9 +10,9 @@
 
 4. **Rule-based classification as the primary engine**: The `CategorizationService` uses a keyword-match hierarchy rather than a black-box ML model. This keeps classification explainable and correctable. Users can create custom rules. ML assistance is additive.
 
-5. **Pluggable chat**: The `ChatService` has two modes:
+5. **Pluggable chat**: The chat API route has two modes:
    - Deterministic: direct SQL queries over financial data (no API key needed)
-   - LLM: uses OpenAI with the financial data as context (requires `OPENAI_API_KEY`)
+   - LLM: uses Claude (Anthropic) with the financial data as context (requires `ANTHROPIC_API_KEY`)
 
 ## Data Flow
 
@@ -88,5 +88,5 @@ See models/ for full schema. Key relationships:
 | Next.js App Router | React Server Components + streaming |
 | Recharts | Flexible, composable charts in React |
 | Zustand | Lightweight state without Redux complexity |
-| JWT (not sessions) | Stateless, works across services |
-| Refresh token rotation | Long-lived sessions without insecure cookies |
+| Supabase Auth | Managed auth — sessions via cookies, no custom JWT |
+| Claude API (Anthropic) | Grounded financial Q&A with real transaction context |

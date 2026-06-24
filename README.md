@@ -68,7 +68,7 @@ Demo mode starts automatically. No bank credentials or API keys required.
 | Cache/Jobs | Redis 7 |
 | Auth | JWT (access + refresh tokens) |
 | Bank Integration | Plaid (pluggable) / Mock Provider |
-| Chat | OpenAI GPT-4o (optional) / Rule-based fallback |
+| Chat | Claude claude-sonnet-4-6 (Anthropic) / Rule-based fallback |
 | Deployment | Docker Compose |
 
 ---
@@ -153,13 +153,13 @@ See [BANK_INTEGRATION.md](BANK_INTEGRATION.md) for full details.
 
 ## Enabling the AI Chat
 
+Add your Anthropic API key in Vercel (or `.env.local` for local dev):
+
 ```
-ENABLE_OPENAI_CHAT=true
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Without this, the chat uses a deterministic rule-based engine that queries your actual financial data directly.
+Without this, the chat uses a deterministic rule-based engine that queries your actual financial data directly. Get a key at [console.anthropic.com](https://console.anthropic.com).
 
 ---
 

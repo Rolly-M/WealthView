@@ -6,7 +6,7 @@ The chat system has two modes, selected by environment:
 
 ### Mode 1: Rule-Based (No API key required)
 
-`ChatService._rule_based_answer()` uses keyword detection + direct SQL queries over the user's financial data.
+Keyword detection + direct SQL queries over the user's financial data.
 
 Supports:
 - Spending by category (current month)
@@ -16,24 +16,31 @@ Supports:
 - Biggest transactions
 - Category trend (highest increase)
 
-### Mode 2: OpenAI-Powered (requires `OPENAI_API_KEY`)
+### Mode 2: Claude-Powered (requires `ANTHROPIC_API_KEY`)
 
-`ChatService._openai_answer()` builds a financial context string from live data and passes it to GPT-4o with a system prompt that:
-- Restricts answers to the provided context
-- Explicitly prohibits personalized investment advice
-- Asks for concise, friendly responses
+`POST /api/chat` fetches live financial context and passes it to **Claude** (`claude-sonnet-4-6`) with a system prompt that includes:
+
+- All active account balances and net worth
+- Last 60 transactions with date, merchant, amount, and category
+- Active budgets and their category allocations
+- Active goals and current progress
 
 ```
-System: You are a helpful financial assistant... answer ONLY from context...
-User:   Financial context: {income, spending, categories...}
-        Question: What did we spend on dining?
+System: You are a knowledgeable personal finance assistant for a couple...
+        ACCOUNTS: Chase Checking $3,247.50 · Marcus Savings $12,500.00 ...
+        RECENT TRANSACTIONS: 2026-06-20 Whole Foods $127.43 [groceries] ...
+        ACTIVE BUDGETS: Groceries $800/mo ...
+        ACTIVE GOALS: Emergency Fund $5,000 / $15,000 (33%) ...
+User:   What did we spend the most on this month?
 ```
+
+Claude answers using only the provided context, keeping responses concise and financially grounded.
 
 ## Conversation Threading
 
-- Each `ChatThread` belongs to one user and one household
-- Threads have a `scope`: `household` (shared data) or `personal` (only this user's accounts)
-- Messages are stored in `ChatMessage` with role (`user`/`assistant`), content, sources, and suggested follow-ups
+- Each `chat_thread` belongs to one user and one household
+- Messages are stored in `chat_messages` with role (`user`/`assistant`), content, and suggested follow-ups
+- Prior thread messages (last 20) are included in every API call for conversation continuity
 - The frontend shows thread history in a sidebar
 
 ## Example Questions & Answers
@@ -81,15 +88,17 @@ User:   Financial context: {income, spending, categories...}
 
 ## Safe Refusals
 
-The system explicitly refuses:
+Claude is prompted to decline out-of-scope requests:
 - "Should I buy this stock?" → "I can provide research information on ETFs but cannot give personalized investment advice."
 - "How do I avoid taxes?" → "That's outside what I can help with — please consult a tax professional."
 - "Is it safe to invest in crypto?" → Redirected to the investment research section with a disclaimer.
 
-## Sources
-
-Each assistant response includes a `sources` array — transaction IDs or date ranges that the answer is based on. In the OpenAI mode these are populated post-answer by cross-referencing the response with the underlying data.
-
 ## Suggested Follow-ups
 
-Every assistant message includes 2-3 suggested follow-up questions that appear as clickable chips below the response, guiding the user toward useful next questions without requiring them to know what to ask.
+Every Claude response optionally ends with:
+
+```
+FOLLOWUPS: ["question 1?", "question 2?", "question 3?"]
+```
+
+The API strips this line and returns `suggested_followups` as a structured array. The frontend renders them as clickable chips below the response.
