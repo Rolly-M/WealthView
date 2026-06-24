@@ -35,7 +35,7 @@ export async function GET() {
 
   type ProfileRow = { id: string; full_name: string; avatar_url: string | null; currency: string; locale: string } | null;
   const members = (membersRes.data ?? []).map((m) => {
-    const profile = m.profiles as ProfileRow;
+    const profile = m.profiles as unknown as ProfileRow;
     return {
       id: m.id,
       role: m.role,
