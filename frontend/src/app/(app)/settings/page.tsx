@@ -5,7 +5,7 @@ import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building
 import { accountsApi, householdsApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 import { formatCurrency, cn } from "@/lib/utils";
-import type { Account, Household } from "@/types";
+import type { Account, Household, User } from "@/types";
 import { usePlaidLink } from "react-plaid-link";
 
 // ─── Plaid Link button ────────────────────────────────────────────────────────
@@ -340,7 +340,7 @@ export default function SettingsPage() {
   );
 }
 
-function ProfileTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>["user"]; setUser: (u: ReturnType<typeof useAuthStore>["user"]) => void }) {
+function ProfileTab({ user, setUser }: { user: User | null; setUser: (u: User | null) => void }) {
   const [name, setName] = useState(user?.full_name ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
