@@ -20,6 +20,10 @@ export const metadata: Metadata = {
   description:
     "Beautifully simple budgeting, spending insights, and investment research for couples.",
   keywords: ["budgeting", "couples finance", "financial planning", "spending tracker"],
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_APP_URL ?? "https://wealthviewduo.vercel.app"
   ),

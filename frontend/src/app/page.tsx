@@ -19,9 +19,8 @@ export default function LandingPage() {
     <div className="min-h-screen bg-gradient-to-br from-warm-50 via-white to-brand-50">
       {/* Nav */}
       <nav className="flex items-center justify-between px-8 py-5 max-w-7xl mx-auto">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl font-bold text-brand-700">WealthView</span>
-          <span className="text-sm font-semibold text-brand-500 bg-brand-50 px-2 py-0.5 rounded-full">Duo</span>
+        <div>
+          <img src="/logo.svg" alt="WealthView Duo" height={32} style={{ height: 32, width: "auto" }} />
         </div>
         <div className="flex items-center gap-4">
           <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">

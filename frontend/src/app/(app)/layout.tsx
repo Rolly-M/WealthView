@@ -48,9 +48,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-surface">
       <aside className="fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-100 flex flex-col z-30 shadow-sm">
         <div className="px-6 py-5 border-b border-gray-100">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="text-xl font-bold text-brand-700">WealthView</span>
-            <span className="text-xs font-semibold text-brand-500 bg-brand-50 px-1.5 py-0.5 rounded-full">Duo</span>
+          <Link href="/dashboard">
+            <img src="/logo.svg" alt="WealthView Duo" height={28} style={{ height: 28, width: "auto" }} />
           </Link>
         </div>
 

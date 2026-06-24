@@ -118,8 +118,7 @@ export default function InviteAcceptPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
-            <span className="text-2xl font-bold text-brand-700">WealthView</span>
-            <span className="text-sm font-semibold text-brand-500 bg-brand-50 px-2 py-0.5 rounded-full ml-1">Duo</span>
+            <img src="/logo.svg" alt="WealthView Duo" height={36} style={{ height: 36, width: "auto" }} />
           </Link>
           <h1 className="mt-6 text-2xl font-bold text-gray-900">Accept your invitation</h1>
           <p className="mt-2 text-sm text-gray-500">Create your account to join the household</p>
