@@ -1,8 +1,12 @@
-// Thin fetch wrapper — returns { data } to match the axios interface used by pages
+import type {
+  User, Household, Account, NetWorthSummary,
+  Transaction, SpendingSummary, Budget, BudgetProgress,
+  Goal, Insight, ChatThread, ChatMessage, ETFSecurity,
+} from "@/types";
 
 type Params = Record<string, string | number | boolean | undefined | null>;
 
-async function request<T = unknown>(
+async function request<T>(
   method: string,
   path: string,
   options?: { body?: unknown; params?: Params }
@@ -34,89 +38,76 @@ async function request<T = unknown>(
   return { data };
 }
 
-const get = <T = unknown>(path: string, params?: Params) =>
-  request<T>("GET", path, { params });
-const post = <T = unknown>(path: string, body?: unknown) =>
-  request<T>("POST", path, { body });
-const patch = <T = unknown>(path: string, body?: unknown) =>
-  request<T>("PATCH", path, { body });
-const del = <T = unknown>(path: string) => request<T>("DELETE", path);
+const get = <T>(path: string, params?: Params) => request<T>("GET", path, { params });
+const post = <T>(path: string, body?: unknown) => request<T>("POST", path, { body });
+const patch = <T>(path: string, body?: unknown) => request<T>("PATCH", path, { body });
+const del = (path: string) => request<void>("DELETE", path);
 
-// Auth — handled directly by Supabase on the client; these are kept for compatibility
 export const authApi = {
-  demoCredentials: () => get("/api/demo-credentials"),
+  demoCredentials: () => get<{ demo_mode: boolean }>("/api/demo-credentials"),
 };
 
-// Profile
 export const usersApi = {
-  me: () => get("/api/profile"),
-  update: (data: object) => patch("/api/profile", data),
-  changePassword: (_data: object) => Promise.resolve({ data: {} }),
+  me: () => get<User>("/api/profile"),
+  update: (data: object) => patch<User>("/api/profile", data),
+  changePassword: (_data: object) => Promise.resolve({ data: undefined as void }),
 };
 
-// Households
 export const householdsApi = {
-  mine: () => get("/api/households"),
-  update: (data: object) => patch("/api/households", data),
-  invite: (data: object) => post("/api/households/invite", data),
-  previewInvite: (token: string) => get(`/api/households/invite/${token}`),
+  mine: () => get<Household>("/api/households"),
+  update: (data: object) => patch<Household>("/api/households", data),
+  invite: (data: object) => post<{ id: string; invite_url: string }>("/api/households/invite", data),
+  previewInvite: (token: string) => get<Household>(`/api/households/invite/${token}`),
 };
 
-// Accounts
 export const accountsApi = {
-  list: () => get("/api/accounts"),
-  link: (data: object) => post("/api/accounts", data),
-  update: (id: string, data: object) => patch(`/api/accounts/${id}`, data),
+  list: () => get<Account[]>("/api/accounts"),
+  link: (data: object) => post<Account>("/api/accounts", data),
+  update: (id: string, data: object) => patch<Account>(`/api/accounts/${id}`, data),
   disconnect: (id: string) => del(`/api/accounts/${id}`),
-  netWorth: () => get("/api/accounts/net-worth"),
+  netWorth: () => get<NetWorthSummary>("/api/accounts/net-worth"),
 };
 
-// Transactions
 export const transactionsApi = {
-  list: (params?: Params) => get("/api/transactions", params),
-  update: (id: string, data: object) => patch(`/api/transactions/${id}`, data),
+  list: (params?: Params) => get<Transaction[]>("/api/transactions", params),
+  update: (id: string, data: object) => patch<Transaction>(`/api/transactions/${id}`, data),
   summary: (startDate: string, endDate: string) =>
-    get("/api/transactions/summary", { start_date: startDate, end_date: endDate }),
+    get<SpendingSummary>("/api/transactions/summary", { start_date: startDate, end_date: endDate }),
 };
 
-// Budgets
 export const budgetsApi = {
-  list: () => get("/api/budgets"),
-  create: (data: object) => post("/api/budgets", data),
-  progress: (id: string) => get(`/api/budgets/${id}/progress`),
+  list: () => get<Budget[]>("/api/budgets"),
+  create: (data: object) => post<Budget>("/api/budgets", data),
+  progress: (id: string) => get<BudgetProgress>(`/api/budgets/${id}/progress`),
   delete: (id: string) => del(`/api/budgets/${id}`),
 };
 
-// Goals
 export const goalsApi = {
-  list: () => get("/api/goals"),
-  create: (data: object) => post("/api/goals", data),
-  update: (id: string, data: object) => patch(`/api/goals/${id}`, data),
-  contribute: (id: string, data: object) => post(`/api/goals/${id}/contribute`, data),
+  list: () => get<Goal[]>("/api/goals"),
+  create: (data: object) => post<Goal>("/api/goals", data),
+  update: (id: string, data: object) => patch<Goal>(`/api/goals/${id}`, data),
+  contribute: (id: string, data: object) => post<Goal>(`/api/goals/${id}/contribute`, data),
 };
 
-// Insights
 export const insightsApi = {
-  list: (params?: Params) => get("/api/insights", params),
-  action: (id: string, action: string) => post(`/api/insights/${id}/action`, { action }),
-  generate: () => post("/api/insights/generate"),
+  list: (params?: Params) => get<Insight[]>("/api/insights", params),
+  action: (id: string, action: string) => post<void>(`/api/insights/${id}/action`, { action }),
+  generate: () => post<void>("/api/insights/generate"),
 };
 
-// Chat
 export const chatApi = {
-  threads: () => get("/api/chat/threads"),
-  thread: (id: string) => get(`/api/chat/threads/${id}`),
+  threads: () => get<ChatThread[]>("/api/chat/threads"),
+  thread: (id: string) => get<ChatThread>(`/api/chat/threads/${id}`),
   sendMessage: (message: string, threadId?: string) =>
-    post("/api/chat", { message, thread_id: threadId }),
+    post<{ thread_id: string; message: ChatMessage }>("/api/chat", { message, thread_id: threadId }),
   deleteThread: (id: string) => del(`/api/chat/threads/${id}`),
 };
 
-// ETF
 export const etfApi = {
-  screen: (params?: Params) => get("/api/etf", params),
-  featured: () => get("/api/etf/featured"),
-  detail: (ticker: string) => get(`/api/etf/${ticker}`),
-  watchlist: () => get("/api/etf/watchlist"),
-  addToWatchlist: (ticker: string) => post(`/api/etf/watchlist/${ticker}`),
+  screen: (params?: Params) => get<ETFSecurity[]>("/api/etf", params),
+  featured: () => get<ETFSecurity[]>("/api/etf/featured"),
+  detail: (ticker: string) => get<ETFSecurity>(`/api/etf/${ticker}`),
+  watchlist: () => get<ETFSecurity[]>("/api/etf/watchlist"),
+  addToWatchlist: (ticker: string) => post<void>(`/api/etf/watchlist/${ticker}`),
   removeFromWatchlist: (ticker: string) => del(`/api/etf/watchlist/${ticker}`),
 };
