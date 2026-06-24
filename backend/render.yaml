@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: wealthview-duo-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: wealthview-duo-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: wealthview-duo-redis
+          type: redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEMO_MODE
+        value: false
+      - key: CORS_ORIGINS
+        value: https://wealthviewduo.vercel.app
+
+  - type: redis
+    name: wealthview-duo-redis
+    plan: free
+    maxmemoryPolicy: noeviction
+
+databases:
+  - name: wealthview-duo-db
+    plan: free
+    databaseName: wealthview_duo
+    user: wealthview
