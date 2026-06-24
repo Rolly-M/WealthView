@@ -34,7 +34,7 @@ export default function InvestmentsPage() {
       ]);
       if (etfRes.status === "fulfilled") setEtfs(etfRes.value.data);
       if (wlRes.status === "fulfilled") {
-        setWatchlist(new Set(wlRes.value.data.map((item: any) => item.security.ticker)));
+        setWatchlist(new Set(wlRes.value.data.map((item) => item.ticker)));
       }
     } finally {
       setLoading(false);
