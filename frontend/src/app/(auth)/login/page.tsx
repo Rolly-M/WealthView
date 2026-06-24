@@ -3,17 +3,20 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { authApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const { setAuth, isAuthenticated } = useAuthStore();
+  const { signIn, isAuthenticated, initialize } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   useEffect(() => {
     if (isAuthenticated) router.replace("/dashboard");
@@ -28,15 +31,12 @@ function LoginForm() {
     setLoading(true);
     setError("");
     try {
-      const res = await authApi.login(email, password);
-      const { access_token, refresh_token } = res.data;
-      localStorage.setItem("access_token", access_token);
-      localStorage.setItem("refresh_token", refresh_token);
-      const userRes = await usersApi.me();
-      setAuth(userRes.data, access_token, refresh_token);
+      await signIn(email, password);
       router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? "Login failed. Please check your credentials.");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } }; message?: string })
+        ?.response?.data?.detail ?? (err as Error)?.message ?? "Login failed.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -83,29 +83,11 @@ function LoginForm() {
 
       <div className="mt-6 pt-6 border-t border-gray-100 text-center">
         <p className="text-sm text-gray-500">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link href="/register" className="text-brand-600 font-medium hover:underline">
             Create one
           </Link>
         </p>
-      </div>
-
-      <div className="mt-4 p-4 rounded-xl bg-brand-50 border border-brand-100">
-        <p className="text-xs font-semibold text-brand-700 mb-2">Demo mode quick-login:</p>
-        <button
-          type="button"
-          onClick={() => { setEmail("alex@demo.wealthviewduo.com"); setPassword("demo1234!"); }}
-          className="text-xs text-brand-600 hover:underline block"
-        >
-          Alex (Owner) — alex@demo.wealthviewduo.com / demo1234!
-        </button>
-        <button
-          type="button"
-          onClick={() => { setEmail("jordan@demo.wealthviewduo.com"); setPassword("demo1234!"); }}
-          className="text-xs text-brand-600 hover:underline block mt-1"
-        >
-          Jordan (Partner) — jordan@demo.wealthviewduo.com / demo1234!
-        </button>
       </div>
     </div>
   );
@@ -124,7 +106,6 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-gray-500">Sign in to your household account</p>
         </div>
 
-        {/* Suspense required because LoginForm uses useSearchParams() */}
         <Suspense fallback={<div className="card shadow-card-lg h-64 shimmer" />}>
           <LoginForm />
         </Suspense>

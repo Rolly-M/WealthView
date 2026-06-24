@@ -1,0 +1,110 @@
+export const MOCK_ETFS = [
+  {
+    id: "vti", ticker: "VTI", name: "Vanguard Total Stock Market ETF",
+    description: "Tracks the CRSP US Total Market Index — broad exposure to the entire US equity market.",
+    exchange: "NYSE Arca", currency: "USD", country: "US", issuer: "Vanguard",
+    category: "US Equities", focus: "Total Market", tags: ["passive", "low-cost", "diversified"],
+    latest_metrics: {
+      as_of_date: "2025-06-01", price: 242.50, aum_millions: 380000,
+      expense_ratio: 0.03, dividend_yield: 1.38,
+      return_1y: 24.5, return_3y_annualized: 10.2, return_5y_annualized: 14.1,
+      volatility_1y: 12.4, sharpe_ratio_1y: 1.8, beta: 1.0,
+      pe_ratio: 22.1, holdings_count: 3700,
+      top_holdings: [
+        { name: "Apple", weight: 6.1 }, { name: "Microsoft", weight: 5.9 },
+        { name: "NVIDIA", weight: 5.3 }, { name: "Amazon", weight: 3.8 }, { name: "Alphabet A", weight: 2.1 },
+      ],
+      sector_allocation: { Technology: 30, Healthcare: 13, Financials: 13, Consumer: 11, Industrials: 9 },
+      geographic_allocation: { "United States": 100 },
+      distribution_history: [
+        { month: "2025-03", amount: 0.82 }, { month: "2025-06", amount: 0.85 },
+      ],
+      why_featured: "The gold-standard low-cost US market fund — ideal core holding for any couple.",
+    },
+  },
+  {
+    id: "vxus", ticker: "VXUS", name: "Vanguard Total International Stock ETF",
+    description: "Covers all non-US equity markets — developed and emerging.",
+    exchange: "NASDAQ", currency: "USD", country: "US", issuer: "Vanguard",
+    category: "International Equities", focus: "ex-US Total Market", tags: ["passive", "diversified", "international"],
+    latest_metrics: {
+      as_of_date: "2025-06-01", price: 61.20, aum_millions: 82000,
+      expense_ratio: 0.07, dividend_yield: 3.1,
+      return_1y: 12.3, return_3y_annualized: 5.8, return_5y_annualized: 7.2,
+      volatility_1y: 14.2, sharpe_ratio_1y: 0.9,
+      top_holdings: [
+        { name: "Nestlé", weight: 1.2 }, { name: "ASML", weight: 1.1 },
+        { name: "Samsung", weight: 1.0 }, { name: "Novo Nordisk", weight: 0.9 }, { name: "Shell", weight: 0.8 },
+      ],
+      sector_allocation: { Financials: 22, Industrials: 15, Technology: 14, Consumer: 13, Healthcare: 10 },
+      geographic_allocation: { Japan: 16, UK: 9, France: 7, Germany: 7, Canada: 6, Emerging: 30 },
+      distribution_history: [
+        { month: "2025-03", amount: 0.45 }, { month: "2025-06", amount: 0.48 },
+      ],
+      why_featured: "Perfect international complement to VTI for global diversification.",
+    },
+  },
+  {
+    id: "bnd", ticker: "BND", name: "Vanguard Total Bond Market ETF",
+    description: "Broad exposure to US investment-grade bonds — treasuries, agencies, and corporates.",
+    exchange: "NASDAQ", currency: "USD", country: "US", issuer: "Vanguard",
+    category: "Bonds", focus: "US Aggregate", tags: ["fixed-income", "low-risk", "income"],
+    latest_metrics: {
+      as_of_date: "2025-06-01", price: 74.80, aum_millions: 110000,
+      expense_ratio: 0.03, dividend_yield: 4.2,
+      return_1y: 3.8, return_3y_annualized: -1.2, return_5y_annualized: 1.1,
+      volatility_1y: 5.2, sharpe_ratio_1y: 0.5,
+      top_holdings: [
+        { name: "US Treasury 4.5% 2033", weight: 3.1 }, { name: "US Treasury 3.875% 2035", weight: 2.8 },
+      ],
+      sector_allocation: { Government: 45, Corporate: 26, Mortgage: 22, Other: 7 },
+      geographic_allocation: { "United States": 100 },
+      distribution_history: [
+        { month: "2025-04", amount: 0.27 }, { month: "2025-05", amount: 0.27 },
+      ],
+      why_featured: "Stability anchor — great for couples building an emergency buffer or nearing a goal.",
+    },
+  },
+  {
+    id: "schd", ticker: "SCHD", name: "Schwab US Dividend Equity ETF",
+    description: "High-quality US dividend stocks with consistent dividend growth.",
+    exchange: "NYSE Arca", currency: "USD", country: "US", issuer: "Schwab",
+    category: "US Equities", focus: "Dividend Growth", tags: ["dividends", "income", "value"],
+    latest_metrics: {
+      as_of_date: "2025-06-01", price: 84.20, aum_millions: 56000,
+      expense_ratio: 0.06, dividend_yield: 3.6, dividend_growth_5y: 11.2,
+      return_1y: 18.4, return_3y_annualized: 9.1, return_5y_annualized: 12.8,
+      volatility_1y: 11.8, sharpe_ratio_1y: 1.4,
+      top_holdings: [
+        { name: "Broadcom", weight: 4.2 }, { name: "AbbVie", weight: 4.1 },
+        { name: "Chevron", weight: 4.0 }, { name: "Coca-Cola", weight: 3.9 }, { name: "Amgen", weight: 3.8 },
+      ],
+      sector_allocation: { Financials: 18, Technology: 17, Healthcare: 16, Industrials: 14, Consumer: 13 },
+      geographic_allocation: { "United States": 100 },
+      distribution_history: [
+        { month: "2025-03", amount: 0.73 }, { month: "2025-06", amount: 0.79 },
+      ],
+      why_featured: null,
+    },
+  },
+  {
+    id: "qqqm", ticker: "QQQM", name: "Invesco Nasdaq-100 ETF",
+    description: "The 100 largest non-financial Nasdaq companies — heavy tech and growth weighting.",
+    exchange: "NASDAQ", currency: "USD", country: "US", issuer: "Invesco",
+    category: "US Equities", focus: "Technology / Growth", tags: ["tech", "growth", "nasdaq"],
+    latest_metrics: {
+      as_of_date: "2025-06-01", price: 198.40, aum_millions: 28000,
+      expense_ratio: 0.15, dividend_yield: 0.62,
+      return_1y: 32.1, return_3y_annualized: 13.4, return_5y_annualized: 19.8,
+      volatility_1y: 18.3, sharpe_ratio_1y: 1.7,
+      top_holdings: [
+        { name: "Microsoft", weight: 8.9 }, { name: "Apple", weight: 8.6 },
+        { name: "NVIDIA", weight: 8.1 }, { name: "Amazon", weight: 5.3 }, { name: "Meta", weight: 5.0 },
+      ],
+      sector_allocation: { Technology: 52, Consumer: 17, Healthcare: 7, Industrials: 5, Other: 19 },
+      geographic_allocation: { "United States": 100 },
+      distribution_history: [{ month: "2025-06", amount: 0.18 }],
+      why_featured: null,
+    },
+  },
+];

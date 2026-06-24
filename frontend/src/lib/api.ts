@@ -1,131 +1,122 @@
-import axios, { type AxiosInstance } from "axios";
+// Thin fetch wrapper — returns { data } to match the axios interface used by pages
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+type Params = Record<string, string | number | boolean | undefined | null>;
 
-function createApiClient(): AxiosInstance {
-  const client = axios.create({
-    baseURL: `${API_URL}/api/v1`,
-    headers: { "Content-Type": "application/json" },
+async function request<T = unknown>(
+  method: string,
+  path: string,
+  options?: { body?: unknown; params?: Params }
+): Promise<{ data: T }> {
+  let url = path;
+  if (options?.params) {
+    const filtered = Object.entries(options.params)
+      .filter(([, v]) => v !== undefined && v !== null)
+      .map(([k, v]) => [k, String(v)]);
+    if (filtered.length > 0) url += "?" + new URLSearchParams(filtered);
+  }
+
+  const res = await fetch(url, {
+    method,
+    headers: options?.body ? { "Content-Type": "application/json" } : {},
+    body: options?.body ? JSON.stringify(options.body) : undefined,
   });
 
-  client.interceptors.request.use((config) => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Request failed" }));
+    const error = new Error(err.error || err.detail || "Request failed") as Error & {
+      response?: { data: unknown; status: number };
+    };
+    error.response = { data: err, status: res.status };
+    throw error;
+  }
 
-  client.interceptors.response.use(
-    (res) => res,
-    async (error) => {
-      if (error.response?.status === 401 && typeof window !== "undefined") {
-        const refresh = localStorage.getItem("refresh_token");
-        if (refresh) {
-          try {
-            const res = await axios.post(`${API_URL}/api/v1/auth/refresh`, {
-              refresh_token: refresh,
-            });
-            localStorage.setItem("access_token", res.data.access_token);
-            localStorage.setItem("refresh_token", res.data.refresh_token);
-            error.config.headers.Authorization = `Bearer ${res.data.access_token}`;
-            return client.request(error.config);
-          } catch {
-            localStorage.removeItem("access_token");
-            localStorage.removeItem("refresh_token");
-            window.location.href = "/login";
-          }
-        }
-      }
-      return Promise.reject(error);
-    }
-  );
-
-  return client;
+  const data = (await res.json()) as T;
+  return { data };
 }
 
-export const api = createApiClient();
+const get = <T = unknown>(path: string, params?: Params) =>
+  request<T>("GET", path, { params });
+const post = <T = unknown>(path: string, body?: unknown) =>
+  request<T>("POST", path, { body });
+const patch = <T = unknown>(path: string, body?: unknown) =>
+  request<T>("PATCH", path, { body });
+const del = <T = unknown>(path: string) => request<T>("DELETE", path);
 
-// Auth
+// Auth — handled directly by Supabase on the client; these are kept for compatibility
 export const authApi = {
-  login: (email: string, password: string) =>
-    api.post("/auth/login", { email, password }),
-  register: (email: string, password: string, full_name: string) =>
-    api.post("/auth/register", { email, password, full_name }),
-  demoCredentials: () => axios.get(`${API_URL}/api/v1/demo/credentials`),
+  demoCredentials: () => get("/api/demo-credentials"),
 };
 
-// Users
+// Profile
 export const usersApi = {
-  me: () => api.get("/users/me"),
-  update: (data: object) => api.patch("/users/me", data),
-  changePassword: (data: object) => api.post("/users/me/change-password", data),
+  me: () => get("/api/profile"),
+  update: (data: object) => patch("/api/profile", data),
+  changePassword: (_data: object) => Promise.resolve({ data: {} }),
 };
 
 // Households
 export const householdsApi = {
-  mine: () => api.get("/households/mine"),
-  update: (data: object) => api.patch("/households/mine", data),
-  invite: (data: object) => api.post("/households/mine/invite", data),
-  previewInvite: (token: string) => api.get(`/households/invite/${token}`),
+  mine: () => get("/api/households"),
+  update: (data: object) => patch("/api/households", data),
+  invite: (data: object) => post("/api/households/invite", data),
+  previewInvite: (token: string) => get(`/api/households/invite/${token}`),
 };
 
 // Accounts
 export const accountsApi = {
-  list: () => api.get("/accounts"),
-  link: (data: object) => api.post("/accounts/link", data),
-  update: (id: string, data: object) => api.patch(`/accounts/${id}`, data),
-  disconnect: (id: string) => api.delete(`/accounts/${id}`),
-  netWorth: () => api.get("/accounts/net-worth"),
+  list: () => get("/api/accounts"),
+  link: (data: object) => post("/api/accounts", data),
+  update: (id: string, data: object) => patch(`/api/accounts/${id}`, data),
+  disconnect: (id: string) => del(`/api/accounts/${id}`),
+  netWorth: () => get("/api/accounts/net-worth"),
 };
 
 // Transactions
 export const transactionsApi = {
-  list: (params?: object) => api.get("/transactions", { params }),
-  update: (id: string, data: object) => api.patch(`/transactions/${id}`, data),
+  list: (params?: Params) => get("/api/transactions", params),
+  update: (id: string, data: object) => patch(`/api/transactions/${id}`, data),
   summary: (startDate: string, endDate: string) =>
-    api.get("/transactions/summary", { params: { start_date: startDate, end_date: endDate } }),
+    get("/api/transactions/summary", { start_date: startDate, end_date: endDate }),
 };
 
 // Budgets
 export const budgetsApi = {
-  list: () => api.get("/budgets"),
-  create: (data: object) => api.post("/budgets", data),
-  progress: (id: string) => api.get(`/budgets/${id}/progress`),
-  delete: (id: string) => api.delete(`/budgets/${id}`),
+  list: () => get("/api/budgets"),
+  create: (data: object) => post("/api/budgets", data),
+  progress: (id: string) => get(`/api/budgets/${id}/progress`),
+  delete: (id: string) => del(`/api/budgets/${id}`),
 };
 
 // Goals
 export const goalsApi = {
-  list: () => api.get("/goals"),
-  create: (data: object) => api.post("/goals", data),
-  update: (id: string, data: object) => api.patch(`/goals/${id}`, data),
-  contribute: (id: string, data: object) => api.post(`/goals/${id}/contribute`, data),
+  list: () => get("/api/goals"),
+  create: (data: object) => post("/api/goals", data),
+  update: (id: string, data: object) => patch(`/api/goals/${id}`, data),
+  contribute: (id: string, data: object) => post(`/api/goals/${id}/contribute`, data),
 };
 
 // Insights
 export const insightsApi = {
-  list: (params?: object) => api.get("/insights", { params }),
-  action: (id: string, action: string) => api.post(`/insights/${id}/action`, { action }),
-  generate: () => api.post("/insights/generate"),
+  list: (params?: Params) => get("/api/insights", params),
+  action: (id: string, action: string) => post(`/api/insights/${id}/action`, { action }),
+  generate: () => post("/api/insights/generate"),
 };
 
 // Chat
 export const chatApi = {
-  threads: () => api.get("/chat/threads"),
-  thread: (id: string) => api.get(`/chat/threads/${id}`),
+  threads: () => get("/api/chat/threads"),
+  thread: (id: string) => get(`/api/chat/threads/${id}`),
   sendMessage: (message: string, threadId?: string) =>
-    api.post("/chat/message", { message, thread_id: threadId }),
-  deleteThread: (id: string) => api.delete(`/chat/threads/${id}`),
+    post("/api/chat", { message, thread_id: threadId }),
+  deleteThread: (id: string) => del(`/api/chat/threads/${id}`),
 };
 
 // ETF
 export const etfApi = {
-  screen: (params?: object) => api.get("/etf/screen", { params }),
-  featured: () => api.get("/etf/featured"),
-  detail: (ticker: string) => api.get(`/etf/${ticker}`),
-  watchlist: () => api.get("/etf/watchlist/mine"),
-  addToWatchlist: (ticker: string) => api.post(`/etf/watchlist/${ticker}`),
-  removeFromWatchlist: (ticker: string) => api.delete(`/etf/watchlist/${ticker}`),
+  screen: (params?: Params) => get("/api/etf", params),
+  featured: () => get("/api/etf/featured"),
+  detail: (ticker: string) => get(`/api/etf/${ticker}`),
+  watchlist: () => get("/api/etf/watchlist"),
+  addToWatchlist: (ticker: string) => post(`/api/etf/watchlist/${ticker}`),
+  removeFromWatchlist: (ticker: string) => del(`/api/etf/watchlist/${ticker}`),
 };
