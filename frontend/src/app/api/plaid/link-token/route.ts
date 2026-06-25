@@ -24,7 +24,7 @@ export async function POST() {
       user: { client_user_id: user.id },
       client_name: "WealthView Duo",
       products: [Products.Transactions],
-      country_codes: [CountryCode.Us, CountryCode.Ca, CountryCode.Gb],
+      country_codes: [CountryCode.Us],
       language: "en",
     });
     return NextResponse.json({ link_token: response.data.link_token });
