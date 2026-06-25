@@ -10,7 +10,7 @@ interface AuthState {
   loading: boolean;
   initialize: () => Promise<() => void>;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ needsConfirmation: boolean }>;
   clearAuth: () => Promise<void>;
   setUser: (user: User | null) => void;
 }
