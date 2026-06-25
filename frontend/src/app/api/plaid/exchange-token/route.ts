@@ -34,23 +34,17 @@ export async function POST(req: Request) {
   const { data: accountsData } = await plaid.accountsGet({ access_token: accessToken });
 
   const accountTypeMap: Record<string, string> = {
-    depository: "checking",
-    credit: "credit",
-    loan: "loan",
-    investment: "investment",
-    other: "other",
+    depository: "checking", credit: "credit", loan: "loan",
+    investment: "investment", other: "other",
   };
-
   const subtypeMap: Record<string, string> = {
-    checking: "checking",
-    savings: "savings",
-    "credit card": "credit",
-    mortgage: "mortgage",
-    auto: "loan",
+    checking: "checking", savings: "savings",
+    "credit card": "credit", mortgage: "mortgage", auto: "loan",
   };
 
-  // Insert each account into Supabase
-  const insertedAccounts = [];
+  // Upsert each Plaid account and build plaidId → supabaseUUID map
+  const plaidToUuid: Record<string, string> = {};
+
   for (const acct of accountsData.accounts) {
     const { data: inserted } = await supabase
       .from("accounts")
@@ -61,7 +55,7 @@ export async function POST(req: Request) {
         provider_account_id: acct.account_id,
         provider_access_token: accessToken,
         name: acct.name,
-        official_name: acct.official_name,
+        official_name: acct.official_name ?? null,
         type: accountTypeMap[acct.type] ?? "other",
         subtype: subtypeMap[acct.subtype ?? ""] ?? acct.subtype ?? null,
         currency: acct.balances.iso_currency_code ?? "USD",
@@ -72,23 +66,26 @@ export async function POST(req: Request) {
         is_active: true,
         last_synced_at: new Date().toISOString(),
       }, { onConflict: "provider_account_id" })
-      .select()
+      .select("id, provider_account_id")
       .single();
 
-    if (inserted) insertedAccounts.push(inserted);
+    if (inserted) {
+      plaidToUuid[inserted.provider_account_id] = inserted.id;
+    }
   }
 
-  // Initial transaction sync (last 90 days)
-  await syncTransactions(supabase, plaid, accessToken, membership.household_id);
+  // Sync initial transactions using the correct UUID mapping
+  await syncTransactions(supabase, plaid, accessToken, membership.household_id, plaidToUuid);
 
-  return NextResponse.json({ accounts: insertedAccounts, item_id: itemId });
+  return NextResponse.json({ accounts: Object.keys(plaidToUuid).length, item_id: itemId });
 }
 
 async function syncTransactions(
   supabase: ReturnType<typeof import("@/lib/supabase/server").createClient>,
   plaid: PlaidApi,
   accessToken: string,
-  householdId: string
+  householdId: string,
+  plaidToUuid: Record<string, string>
 ) {
   let cursor: string | undefined;
   let hasMore = true;
@@ -100,23 +97,27 @@ async function syncTransactions(
       options: { include_personal_finance_category: true },
     });
 
-    const toInsert = data.added.map((t) => ({
-      account_id: t.account_id,
-      household_id: householdId,
-      provider_transaction_id: t.transaction_id,
-      amount: Math.abs(t.amount),
-      currency: t.iso_currency_code ?? "USD",
-      date: t.date,
-      merchant_name: t.merchant_name ?? t.name,
-      description: t.name,
-      category: mapCategory(t.personal_finance_category?.primary ?? t.category?.[0] ?? ""),
-      is_income: t.amount < 0,
-      is_pending: t.pending,
-      tags: [],
-    }));
+    const toInsert = data.added
+      .filter((t) => plaidToUuid[t.account_id]) // skip if no UUID mapping
+      .map((t) => ({
+        account_id: plaidToUuid[t.account_id],  // ← correct Supabase UUID
+        household_id: householdId,
+        provider_transaction_id: t.transaction_id,
+        amount: Math.abs(t.amount),
+        currency: t.iso_currency_code ?? "USD",
+        date: t.date,
+        merchant_name: t.merchant_name ?? t.name,
+        description: t.name,
+        category: mapCategory(t.personal_finance_category?.primary ?? t.category?.[0] ?? ""),
+        is_income: t.amount < 0,
+        is_pending: t.pending,
+        tags: [],
+      }));
 
     if (toInsert.length > 0) {
-      await supabase.from("transactions").upsert(toInsert, { onConflict: "provider_transaction_id" });
+      await supabase
+        .from("transactions")
+        .upsert(toInsert, { onConflict: "provider_transaction_id" });
     }
 
     cursor = data.next_cursor;

@@ -55,6 +55,16 @@ export async function POST() {
         .eq("provider_account_id", b.account_id);
     }
 
+    // Build plaid account_id → our Supabase UUID map for this token
+    const { data: ourAccounts } = await supabase
+      .from("accounts")
+      .select("id, provider_account_id")
+      .eq("household_id", membership.household_id)
+      .eq("provider", "plaid");
+    const plaidToUuid = Object.fromEntries(
+      (ourAccounts ?? []).map((a) => [a.provider_account_id, a.id])
+    );
+
     // Sync new transactions
     let cursor: string | undefined;
     let hasMore = true;
@@ -66,8 +76,10 @@ export async function POST() {
         options: { include_personal_finance_category: true },
       });
 
-      const toInsert = data.added.map((t) => ({
-        account_id: t.account_id,
+      const toInsert = data.added
+        .filter((t) => plaidToUuid[t.account_id])
+        .map((t) => ({
+        account_id: plaidToUuid[t.account_id],  // ← correct Supabase UUID
         household_id: membership.household_id,
         provider_transaction_id: t.transaction_id,
         amount: Math.abs(t.amount),

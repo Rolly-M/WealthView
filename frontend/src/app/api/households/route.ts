@@ -11,26 +11,30 @@ async function getOrCreateMembership(supabase: ReturnType<typeof createClient>, 
 
   if (membership) return membership;
 
-  // Auto-create household for users who signed up before the callback was in place
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", userId)
-    .single();
-
+  // Use admin client for auto-create to bypass any RLS edge cases
   const admin = createAdminClient();
-  const { data: authData } = await admin.auth.admin.getUserById(userId);
-  const name = profile?.full_name || authData.user?.email?.split("@")[0] || "My";
 
-  const { data: household } = await supabase
+  const [profileRes, authRes] = await Promise.all([
+    supabase.from("profiles").select("full_name").eq("id", userId).single(),
+    admin.auth.admin.getUserById(userId),
+  ]);
+  const name =
+    profileRes.data?.full_name ||
+    authRes.data.user?.email?.split("@")[0] ||
+    "My";
+
+  const { data: household, error: hhError } = await admin
     .from("households")
     .insert({ name: `${name}'s Household` })
     .select()
     .single();
 
-  if (!household) return null;
+  if (hhError || !household) {
+    console.error("Failed to create household:", hhError?.message);
+    return null;
+  }
 
-  await supabase
+  await admin
     .from("household_members")
     .insert({ household_id: household.id, user_id: userId, role: "owner" });
 
