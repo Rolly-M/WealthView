@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
   const supabase = createClient();
@@ -42,4 +43,47 @@ export async function PATCH(req: Request) {
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 });
   return NextResponse.json({ ...data, email: user.email });
+}
+
+export async function DELETE() {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const admin = createAdminClient();
+
+  // Find the user's household membership
+  const { data: membership } = await supabase
+    .from("household_members")
+    .select("household_id, role")
+    .eq("user_id", user.id)
+    .single();
+
+  if (membership) {
+    // Check how many members are in the household
+    const { data: allMembers } = await supabase
+      .from("household_members")
+      .select("id")
+      .eq("household_id", membership.household_id);
+
+    if (allMembers && allMembers.length <= 1) {
+      // Only member — delete the entire household (cascades to accounts, transactions, budgets, goals)
+      await supabase
+        .from("households")
+        .delete()
+        .eq("id", membership.household_id);
+    } else {
+      // Remove only this user's membership
+      await supabase
+        .from("household_members")
+        .delete()
+        .eq("user_id", user.id);
+    }
+  }
+
+  // Delete the Supabase auth user — cascades to profiles via DB trigger
+  const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
+  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
+
+  return new NextResponse(null, { status: 204 });
 }

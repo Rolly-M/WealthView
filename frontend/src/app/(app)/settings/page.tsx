@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building2, AlertTriangle } from "lucide-react";
 import { accountsApi, householdsApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -373,9 +374,15 @@ export default function SettingsPage() {
 }
 
 function ProfileTab({ user, setUser }: { user: User | null; setUser: (u: User | null) => void }) {
+  const router = useRouter();
+  const { clearAuth } = useAuthStore();
   const [name, setName] = useState(user?.full_name ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -390,23 +397,123 @@ function ProfileTab({ user, setUser }: { user: User | null; setUser: (u: User | 
     }
   }
 
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch("/api/profile", { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? "Failed to delete account");
+      }
+      await clearAuth();
+      router.push("/login");
+    } catch (err: unknown) {
+      setDeleteError((err as Error)?.message ?? "Something went wrong");
+      setDeleting(false);
+    }
+  }
+
+  const confirmPhrase = "delete my account";
+
   return (
-    <div className="card">
-      <h2 className="font-semibold text-gray-900 mb-4">Profile</h2>
-      <form onSubmit={save} className="space-y-4 max-w-sm">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Full name</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} required />
+    <div className="space-y-4">
+      <div className="card">
+        <h2 className="font-semibold text-gray-900 mb-4">Profile</h2>
+        <form onSubmit={save} className="space-y-4 max-w-sm">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Full name</label>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+            <input className="input bg-gray-50 text-gray-500 cursor-not-allowed" value={user?.email ?? ""} disabled />
+            <p className="text-xs text-gray-400 mt-1">Email cannot be changed here</p>
+          </div>
+          <button type="submit" disabled={saving} className="btn-primary">
+            {saved ? "✓ Saved" : saving ? "Saving…" : "Save changes"}
+          </button>
+        </form>
+      </div>
+
+      {/* Danger zone */}
+      <div className="card border border-red-200">
+        <div className="flex items-start gap-3">
+          <AlertTriangle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-gray-900 text-sm">Delete account</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Permanently delete your account and all associated data — transactions, budgets, goals, and bank connections. This cannot be undone.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            Delete account
+          </button>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-          <input className="input bg-gray-50 text-gray-500 cursor-not-allowed" value={user?.email ?? ""} disabled />
-          <p className="text-xs text-gray-400 mt-1">Email cannot be changed here</p>
+      </div>
+
+      {/* Confirmation modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <AlertTriangle size={20} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Delete your account?</h3>
+                <p className="text-xs text-gray-500">This action is permanent and cannot be undone.</p>
+              </div>
+            </div>
+
+            <ul className="text-xs text-gray-600 space-y-1 mb-5 bg-red-50 rounded-xl p-3 border border-red-100">
+              <li>• All your transactions will be deleted</li>
+              <li>• All budgets and goals will be deleted</li>
+              <li>• All bank connections will be removed</li>
+              <li>• Your household data will be removed</li>
+              <li>• Your account cannot be recovered</li>
+            </ul>
+
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Type <span className="font-mono font-bold text-red-600">{confirmPhrase}</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder={confirmPhrase}
+                className="input text-sm"
+                autoFocus
+              />
+            </div>
+
+            {deleteError && (
+              <p className="text-xs text-red-600 mb-3">{deleteError}</p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowDeleteModal(false); setDeleteConfirm(""); setDeleteError(""); }}
+                className="btn-secondary flex-1"
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirm !== confirmPhrase || deleting}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {deleting ? "Deleting…" : "Yes, delete everything"}
+              </button>
+            </div>
+          </div>
         </div>
-        <button type="submit" disabled={saving} className="btn-primary">
-          {saved ? "✓ Saved" : saving ? "Saving…" : "Save changes"}
-        </button>
-      </form>
+      )}
     </div>
   );
 }
