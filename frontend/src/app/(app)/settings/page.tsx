@@ -9,23 +9,16 @@ import type { Account, Household, User } from "@/types";
 import { usePlaidLink } from "react-plaid-link";
 
 // ─── Plaid Link button ────────────────────────────────────────────────────────
-function PlaidLinkButton({ onSuccess, variant = "default" }: { onSuccess: () => void; variant?: "default" | "large" }) {
-  const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [fetchError, setFetchError] = useState(false);
+// Inner component — only mounted once we have a valid token
+function PlaidLinkInner({
+  token, onSuccess, variant,
+}: {
+  token: string; onSuccess: () => void; variant: "default" | "large";
+}) {
   const [connecting, setConnecting] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/plaid/link-token", { method: "POST" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.link_token) setLinkToken(d.link_token);
-        else setFetchError(true);
-      })
-      .catch(() => setFetchError(true));
-  }, []);
-
   const { open, ready } = usePlaidLink({
-    token: linkToken ?? "",
+    token,
     onSuccess: async (publicToken) => {
       setConnecting(true);
       try {
@@ -41,16 +34,6 @@ function PlaidLinkButton({ onSuccess, variant = "default" }: { onSuccess: () => 
     },
   });
 
-  if (fetchError) {
-    return (
-      <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
-        Add <code className="font-mono">PLAID_CLIENT_ID</code>, <code className="font-mono">PLAID_SECRET</code> and <code className="font-mono">PLAID_ENV</code> to Vercel env vars to enable bank connections.
-      </div>
-    );
-  }
-
-  const label = connecting ? "Connecting…" : !ready ? "Loading…" : "Connect bank account";
-
   return (
     <button
       onClick={() => open()}
@@ -58,9 +41,44 @@ function PlaidLinkButton({ onSuccess, variant = "default" }: { onSuccess: () => 
       className={variant === "large" ? "btn-primary" : "btn-primary text-xs py-2"}
     >
       <Building2 size={variant === "large" ? 16 : 13} />
-      {label}
+      {connecting ? "Connecting…" : !ready ? "Initialising…" : "Connect bank account"}
     </button>
   );
+}
+
+function PlaidLinkButton({ onSuccess, variant = "default" }: { onSuccess: () => void; variant?: "default" | "large" }) {
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/plaid/link-token", { method: "POST" })
+      .then(async (r) => {
+        const d = await r.json();
+        if (d.link_token) setLinkToken(d.link_token);
+        else setFetchError(d.error ?? "Failed to load Plaid Link");
+      })
+      .catch(() => setFetchError("Network error — could not reach /api/plaid/link-token"));
+  }, []);
+
+  if (fetchError) {
+    return (
+      <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg max-w-xs">
+        <p className="font-semibold mb-0.5">Bank connection unavailable</p>
+        <p className="text-amber-600">{fetchError}</p>
+      </div>
+    );
+  }
+
+  if (!linkToken) {
+    return (
+      <button disabled className={variant === "large" ? "btn-primary opacity-60" : "btn-primary text-xs py-2 opacity-60"}>
+        <Building2 size={variant === "large" ? 16 : 13} />
+        Loading…
+      </button>
+    );
+  }
+
+  return <PlaidLinkInner token={linkToken} onSuccess={onSuccess} variant={variant} />;
 }
 
 // ─── Sync button ──────────────────────────────────────────────────────────────

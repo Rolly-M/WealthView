@@ -19,13 +19,20 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const response = await plaid.linkTokenCreate({
-    user: { client_user_id: user.id },
-    client_name: "WealthView Duo",
-    products: [Products.Transactions],
-    country_codes: [CountryCode.Us, CountryCode.Ca, CountryCode.Gb],
-    language: "en",
-  });
-
-  return NextResponse.json({ link_token: response.data.link_token });
+  try {
+    const response = await plaid.linkTokenCreate({
+      user: { client_user_id: user.id },
+      client_name: "WealthView Duo",
+      products: [Products.Transactions],
+      country_codes: [CountryCode.Us, CountryCode.Ca, CountryCode.Gb],
+      language: "en",
+    });
+    return NextResponse.json({ link_token: response.data.link_token });
+  } catch (err: unknown) {
+    const plaidErr = (err as { response?: { data?: unknown } })?.response?.data;
+    const message = plaidErr
+      ? JSON.stringify(plaidErr)
+      : (err as Error)?.message ?? "Plaid API error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
