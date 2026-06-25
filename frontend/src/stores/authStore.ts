@@ -63,7 +63,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signUp: async (email, password, fullName) => {
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: fullName } },
@@ -73,6 +73,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       e.response = { data: { detail: error.message } };
       throw e;
     }
+    // Returns true when email confirmation is required (no session yet)
+    return { needsConfirmation: !data.session };
   },
 
   clearAuth: async () => {

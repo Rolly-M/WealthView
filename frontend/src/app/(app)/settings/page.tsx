@@ -17,33 +17,49 @@ function PlaidLinkInner({
   token: string; onSuccess: () => void; variant: "default" | "large";
 }) {
   const [connecting, setConnecting] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   const { open, ready } = usePlaidLink({
     token,
     onSuccess: async (publicToken) => {
       setConnecting(true);
+      setLinkError(null);
       try {
-        await fetch("/api/plaid/exchange-token", {
+        const res = await fetch("/api/plaid/exchange-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ public_token: publicToken }),
         });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error ?? `Server error ${res.status}`);
+        }
         onSuccess();
+      } catch (err: unknown) {
+        setLinkError((err as Error)?.message ?? "Failed to connect bank");
       } finally {
         setConnecting(false);
       }
     },
+    onExit: (err) => {
+      if (err) setLinkError(err.display_message ?? err.error_message ?? null);
+    },
   });
 
   return (
-    <button
-      onClick={() => open()}
-      disabled={!ready || connecting}
-      className={variant === "large" ? "btn-primary" : "btn-primary text-xs py-2"}
-    >
-      <Building2 size={variant === "large" ? 16 : 13} />
-      {connecting ? "Connecting…" : !ready ? "Initialising…" : "Connect bank account"}
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      <button
+        onClick={() => { setLinkError(null); open(); }}
+        disabled={!ready || connecting}
+        className={variant === "large" ? "btn-primary" : "btn-primary text-xs py-2"}
+      >
+        <Building2 size={variant === "large" ? 16 : 13} />
+        {connecting ? "Importing…" : !ready ? "Initialising…" : "Connect bank account"}
+      </button>
+      {linkError && (
+        <p className="text-xs text-red-500 max-w-xs text-right">{linkError}</p>
+      )}
+    </div>
   );
 }
 

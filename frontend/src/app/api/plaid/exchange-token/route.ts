@@ -42,35 +42,57 @@ export async function POST(req: Request) {
     "credit card": "credit", mortgage: "mortgage", auto: "loan",
   };
 
-  // Upsert each Plaid account and build plaidId → supabaseUUID map
+  // Insert/update each Plaid account and build plaidId → supabaseUUID map
+  // Using select+insert/update instead of upsert (no unique constraint needed)
   const plaidToUuid: Record<string, string> = {};
 
   for (const acct of accountsData.accounts) {
-    const { data: inserted } = await supabase
+    const accountPayload = {
+      household_id: membership.household_id,
+      owner_id: user.id,
+      provider: "plaid",
+      provider_account_id: acct.account_id,
+      provider_access_token: accessToken,
+      name: acct.name,
+      official_name: acct.official_name ?? null,
+      type: accountTypeMap[acct.type] ?? "other",
+      subtype: subtypeMap[acct.subtype ?? ""] ?? acct.subtype ?? null,
+      currency: acct.balances.iso_currency_code ?? "USD",
+      current_balance: acct.balances.current ?? 0,
+      available_balance: acct.balances.available ?? null,
+      credit_limit: acct.balances.limit ?? null,
+      is_shared: true,
+      is_active: true,
+      last_synced_at: new Date().toISOString(),
+    };
+
+    // Check if this Plaid account already exists
+    const { data: existing } = await supabase
       .from("accounts")
-      .upsert({
-        household_id: membership.household_id,
-        owner_id: user.id,
-        provider: "plaid",
-        provider_account_id: acct.account_id,
-        provider_access_token: accessToken,
-        name: acct.name,
-        official_name: acct.official_name ?? null,
-        type: accountTypeMap[acct.type] ?? "other",
-        subtype: subtypeMap[acct.subtype ?? ""] ?? acct.subtype ?? null,
-        currency: acct.balances.iso_currency_code ?? "USD",
-        current_balance: acct.balances.current ?? 0,
-        available_balance: acct.balances.available ?? null,
-        credit_limit: acct.balances.limit ?? null,
-        is_shared: true,
-        is_active: true,
-        last_synced_at: new Date().toISOString(),
-      }, { onConflict: "provider_account_id" })
-      .select("id, provider_account_id")
+      .select("id")
+      .eq("provider_account_id", acct.account_id)
       .single();
 
-    if (inserted) {
-      plaidToUuid[inserted.provider_account_id] = inserted.id;
+    if (existing) {
+      // Update balance + token
+      await supabase
+        .from("accounts")
+        .update({
+          current_balance: accountPayload.current_balance,
+          available_balance: accountPayload.available_balance,
+          provider_access_token: accessToken,
+          last_synced_at: accountPayload.last_synced_at,
+        })
+        .eq("id", existing.id);
+      plaidToUuid[acct.account_id] = existing.id;
+    } else {
+      // Insert new account
+      const { data: inserted } = await supabase
+        .from("accounts")
+        .insert(accountPayload)
+        .select("id")
+        .single();
+      if (inserted) plaidToUuid[acct.account_id] = inserted.id;
     }
   }
 

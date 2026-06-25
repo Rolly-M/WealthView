@@ -9,6 +9,10 @@ import { createClient } from "@/lib/supabase/client";
 export default function RegisterPage() {
   const router = useRouter();
   const { signUp } = useAuthStore();
+  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
   async function handleGoogle() {
     const supabase = createClient();
@@ -17,9 +21,6 @@ export default function RegisterPage() {
       options: { redirectTo: `${window.location.origin}/api/auth/callback` },
     });
   }
-  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm: "" });
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,15 +30,20 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
     try {
-      await signUp(form.email, form.password, form.full_name);
+      const { needsConfirmation: confirm } = await signUp(form.email, form.password, form.full_name);
 
-      // Create a default household for the new user
+      if (confirm) {
+        // Email confirmation required — show check-email screen
+        setNeedsConfirmation(true);
+        return;
+      }
+
+      // No confirmation needed (Supabase email confirm disabled) — go straight in
       await fetch("/api/households", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: `${form.full_name}'s Household` }),
       });
-
       router.push("/dashboard");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } }; message?: string })
@@ -48,12 +54,43 @@ export default function RegisterPage() {
     }
   }
 
+  // ── Check-your-email screen ──────────────────────────────────────────────
+  if (needsConfirmation) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-warm-50 via-white to-brand-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md text-center card shadow-card-lg">
+          <div className="text-5xl mb-4">📬</div>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">Check your email</h1>
+          <p className="text-sm text-gray-500 mb-4">
+            We sent a confirmation link to <strong>{form.email}</strong>.
+            Click it to activate your account, then come back and sign in.
+          </p>
+          <Link href="/login" className="btn-primary inline-flex">
+            Go to sign in
+          </Link>
+          <p className="text-xs text-gray-400 mt-4">
+            Didn&apos;t get it? Check your spam folder or{" "}
+            <button
+              onClick={() => setNeedsConfirmation(false)}
+              className="text-brand-600 hover:underline"
+            >
+              try again
+            </button>
+            .
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Registration form ────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-warm-50 via-white to-brand-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
-            <img src="/logo.svg" alt="WealthView Duo" height={36} style={{ height: 36, width: "auto" }} />
+            <span className="text-2xl font-bold text-brand-700">WealthView</span>
+            <span className="text-sm font-semibold text-brand-500 bg-brand-50 px-2 py-0.5 rounded-full ml-1">Duo</span>
           </Link>
           <h1 className="mt-6 text-2xl font-bold text-gray-900">Create your household</h1>
           <p className="mt-2 text-sm text-gray-500">Set up your account, then invite your partner</p>
@@ -70,9 +107,7 @@ export default function RegisterPage() {
           </button>
 
           <div className="relative mb-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-100" />
-            </div>
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-100" /></div>
             <div className="relative flex justify-center">
               <span className="bg-white px-3 text-xs text-gray-400">or create account with email</span>
             </div>
@@ -80,11 +115,8 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
-                {error}
-              </div>
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
             )}
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Your name</label>
               <input type="text" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Alex Johnson" className="input" required autoFocus />
@@ -101,7 +133,6 @@ export default function RegisterPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm password</label>
               <input type="password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} placeholder="Repeat password" className="input" required />
             </div>
-
             <button type="submit" disabled={loading} className="btn-primary w-full mt-2">
               {loading ? "Creating account…" : "Create account"}
             </button>
