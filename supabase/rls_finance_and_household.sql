@@ -124,8 +124,8 @@ returns table (
   id uuid,
   household_id uuid,
   email text,
-  role invitation_role,
-  status invitation_status,
+  role text,
+  status text,
   expires_at timestamptz,
   household_name text
 )
@@ -134,7 +134,7 @@ security definer
 set search_path = public
 stable
 as $$
-  select i.id, i.household_id, i.email, i.role, i.status, i.expires_at, h.name
+  select i.id, i.household_id, i.email, i.role::text, i.status::text, i.expires_at, h.name
   from public.invitations i
   join public.households h on h.id = i.household_id
   where i.token = p_token;
