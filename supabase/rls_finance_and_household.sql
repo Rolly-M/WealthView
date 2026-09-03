@@ -10,6 +10,10 @@
 -- insert policy and the get_invitation_by_token() function, which replace app-level
 -- checks that used to be the only thing standing between a user and another
 -- household's data.
+--
+-- Idempotent: every CREATE POLICY is preceded by DROP POLICY IF EXISTS, so this
+-- is safe to re-run in full after a partial failure (the Supabase SQL Editor
+-- commits each statement as it runs rather than the whole script atomically).
 
 -- ── Helper: is the current user a member of this household? ────────────────
 -- public.is_household_member(uuid) already exists in this database (it's what
@@ -23,24 +27,29 @@
 -- ── households ───────────────────────────────────────────────────────────
 alter table public.households enable row level security;
 
+drop policy if exists "households_select" on public.households;
 create policy "households_select" on public.households
   for select using (public.is_household_member(id));
 
 -- Any authenticated user may create a household; they only gain access to it
 -- once household_members_insert (below) lets them add themselves as owner.
+drop policy if exists "households_insert" on public.households;
 create policy "households_insert" on public.households
   for insert with check (auth.uid() is not null);
 
+drop policy if exists "households_update" on public.households;
 create policy "households_update" on public.households
   for update using (public.is_household_member(id));
 
 -- Matches DELETE /api/profile's "sole member deletes the household" flow.
+drop policy if exists "households_delete" on public.households;
 create policy "households_delete" on public.households
   for delete using (public.is_household_member(id));
 
 -- ── household_members ───────────────────────────────────────────────────
 alter table public.household_members enable row level security;
 
+drop policy if exists "household_members_select" on public.household_members;
 create policy "household_members_select" on public.household_members
   for select using (public.is_household_member(household_id));
 
@@ -49,6 +58,7 @@ create policy "household_members_select" on public.household_members
 --   2. Accepting a pending invitation addressed to their own account email.
 -- This is what stands between an attacker and joining an arbitrary existing
 -- household now that the row-level check exists at the DB layer too.
+drop policy if exists "household_members_insert_self" on public.household_members;
 create policy "household_members_insert_self" on public.household_members
   for insert
   with check (
@@ -72,6 +82,7 @@ create policy "household_members_insert_self" on public.household_members
   );
 
 -- Matches DELETE /api/profile's "remove only this user's membership" flow.
+drop policy if exists "household_members_delete_self" on public.household_members;
 create policy "household_members_delete_self" on public.household_members
   for delete using (user_id = auth.uid());
 
@@ -79,12 +90,15 @@ create policy "household_members_delete_self" on public.household_members
 alter table public.invitations enable row level security;
 
 -- Household members manage invites for their own household (send, list, revoke).
+drop policy if exists "invitations_select_members" on public.invitations;
 create policy "invitations_select_members" on public.invitations
   for select using (public.is_household_member(household_id));
 
+drop policy if exists "invitations_insert_members" on public.invitations;
 create policy "invitations_insert_members" on public.invitations
   for insert with check (public.is_household_member(household_id));
 
+drop policy if exists "invitations_update_members" on public.invitations;
 create policy "invitations_update_members" on public.invitations
   for update using (public.is_household_member(household_id));
 
@@ -92,6 +106,7 @@ create policy "invitations_update_members" on public.invitations
 -- while the caller is authenticated but NOT yet a household member — the
 -- members-only policy above won't match, so allow reading an invite addressed
 -- to the caller's own account email regardless of household membership.
+drop policy if exists "invitations_select_own_email" on public.invitations;
 create policy "invitations_select_own_email" on public.invitations
   for select using (
     auth.uid() is not null
@@ -132,6 +147,7 @@ alter table public.profiles enable row level security;
 
 -- Your own profile, plus profiles of anyone who shares a household with you
 -- (needed for GET /api/households' member list).
+drop policy if exists "profiles_select_self_or_household" on public.profiles;
 create policy "profiles_select_self_or_household" on public.profiles
   for select using (
     id = auth.uid()
@@ -143,6 +159,7 @@ create policy "profiles_select_self_or_household" on public.profiles
     )
   );
 
+drop policy if exists "profiles_update_self" on public.profiles;
 create policy "profiles_update_self" on public.profiles
   for update using (id = auth.uid());
 
@@ -150,14 +167,17 @@ create policy "profiles_update_self" on public.profiles
 -- Straightforward: any household member may read/write rows belonging to
 -- their own household. No RLS policy exists for these tables today.
 alter table public.accounts enable row level security;
+drop policy if exists "accounts_all" on public.accounts;
 create policy "accounts_all" on public.accounts
   for all using (public.is_household_member(household_id));
 
 alter table public.budgets enable row level security;
+drop policy if exists "budgets_all" on public.budgets;
 create policy "budgets_all" on public.budgets
   for all using (public.is_household_member(household_id));
 
 alter table public.budget_categories enable row level security;
+drop policy if exists "budget_categories_all" on public.budget_categories;
 create policy "budget_categories_all" on public.budget_categories
   for all using (
     exists (
@@ -167,9 +187,11 @@ create policy "budget_categories_all" on public.budget_categories
   );
 
 alter table public.goals enable row level security;
+drop policy if exists "goals_all" on public.goals;
 create policy "goals_all" on public.goals
   for all using (public.is_household_member(household_id));
 
 alter table public.transactions enable row level security;
+drop policy if exists "transactions_all" on public.transactions;
 create policy "transactions_all" on public.transactions
   for all using (public.is_household_member(household_id));
