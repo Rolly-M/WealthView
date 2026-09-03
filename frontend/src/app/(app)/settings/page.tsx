@@ -178,7 +178,7 @@ export default function SettingsPage() {
       setInviteEmail("");
       load();
     } catch (err: unknown) {
-      setInviteStatus("Failed: " + ((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Unknown error"));
+      setInviteStatus("Failed: " + ((err as Error)?.message ?? "Unknown error"));
     } finally {
       setInviting(false);
     }
