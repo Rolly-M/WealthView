@@ -8,17 +8,18 @@ import { createClient } from "@/lib/supabase/client";
 
 function InviteForm({ token }: { token: string }) {
   const router = useRouter();
-  const [preview, setPreview] = useState<{ email?: string; households?: { name?: string } } | null>(null);
+  const [preview, setPreview] = useState<{ email?: string; household_name?: string } | null>(null);
   const [previewError, setPreviewError] = useState(false);
   const [form, setForm] = useState({ full_name: "", password: "", confirm: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
   useEffect(() => {
     householdsApi
       .previewInvite(token)
-      .then((r) => setPreview(r.data as { email?: string; households?: { name?: string } }))
+      .then((r) => setPreview(r.data as { email?: string; household_name?: string }))
       .catch(() => setPreviewError(true))
       .finally(() => setPreviewLoading(false));
   }, [token]);
@@ -35,15 +36,26 @@ function InviteForm({ token }: { token: string }) {
       const supabase = createClient();
 
       // Create Supabase account
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: preview.email,
         password: form.password,
         options: { data: { full_name: form.full_name } },
       });
       if (signUpError) throw new Error(signUpError.message);
 
+      if (!signUpData.session) {
+        // Email confirmation required — no session yet, so the invite can't
+        // be accepted until the user confirms and comes back to this link.
+        setNeedsConfirmation(true);
+        return;
+      }
+
       // Accept the household invite
-      await fetch(`/api/households/invite/${token}`, { method: "POST" });
+      const acceptRes = await fetch(`/api/households/invite/${token}`, { method: "POST" });
+      if (!acceptRes.ok) {
+        const body = await acceptRes.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to join household");
+      }
 
       router.push("/dashboard");
     } catch (err: unknown) {
@@ -54,6 +66,20 @@ function InviteForm({ token }: { token: string }) {
   }
 
   if (previewLoading) return <div className="card shadow-card-lg h-64 shimmer" />;
+
+  if (needsConfirmation) {
+    return (
+      <div className="card max-w-md w-full text-center">
+        <div className="text-5xl mb-4">📬</div>
+        <h1 className="text-xl font-bold text-gray-900 mb-2">Check your email</h1>
+        <p className="text-sm text-gray-500 mb-4">
+          We sent a confirmation link to <strong>{preview?.email}</strong>. Click it to
+          activate your account, then come back to this invite link to finish joining.
+        </p>
+        <Link href="/login" className="btn-secondary">Go to login</Link>
+      </div>
+    );
+  }
 
   if (previewError || !preview) {
     return (
@@ -74,7 +100,7 @@ function InviteForm({ token }: { token: string }) {
         <div className="text-3xl mb-2">🤝</div>
         <h2 className="text-base font-semibold text-gray-900">You&apos;ve been invited!</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Join <strong>{preview.households?.name ?? "your household"}</strong> on WealthView Duo.
+          Join <strong>{preview.household_name ?? "your household"}</strong> on WealthView Duo.
         </p>
         <p className="text-xs text-brand-700 font-medium mt-2">{preview.email}</p>
       </div>

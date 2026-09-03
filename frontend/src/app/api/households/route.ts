@@ -1,45 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-async function getOrCreateMembership(supabase: ReturnType<typeof createClient>, userId: string) {
-  const { data: membership } = await supabase
-    .from("household_members")
-    .select("household_id, role")
-    .eq("user_id", userId)
-    .single();
-
-  if (membership) return membership;
-
-  // Use admin client for auto-create to bypass any RLS edge cases
-  const admin = createAdminClient();
-
-  const [profileRes, authRes] = await Promise.all([
-    supabase.from("profiles").select("full_name").eq("id", userId).single(),
-    admin.auth.admin.getUserById(userId),
-  ]);
-  const name =
-    profileRes.data?.full_name ||
-    authRes.data.user?.email?.split("@")[0] ||
-    "My";
-
-  const { data: household, error: hhError } = await admin
-    .from("households")
-    .insert({ name: `${name}'s Household` })
-    .select()
-    .single();
-
-  if (hhError || !household) {
-    console.error("Failed to create household:", hhError?.message);
-    return null;
-  }
-
-  await admin
-    .from("household_members")
-    .insert({ household_id: household.id, user_id: userId, role: "owner" });
-
-  return { household_id: household.id, role: "owner" };
-}
+import { getOrCreateMembership } from "@/lib/supabase/household";
 
 export async function GET() {
   const supabase = createClient();
@@ -99,6 +61,21 @@ export async function POST(req: Request) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: existing } = await supabase
+    .from("household_members")
+    .select("household_id")
+    .eq("user_id", user.id)
+    .single();
+  if (existing) {
+    const { data: household, error } = await supabase
+      .from("households")
+      .select("*")
+      .eq("id", existing.household_id)
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json(household, { status: 200 });
+  }
 
   const body = await req.json();
   const { data: household, error } = await supabase

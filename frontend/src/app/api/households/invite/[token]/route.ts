@@ -6,11 +6,10 @@ export async function GET(
   { params }: { params: { token: string } }
 ) {
   const supabase = createClient();
-  const { data: invite } = await supabase
-    .from("invitations")
-    .select("*, households(name)")
-    .eq("token", params.token)
-    .single();
+  const { data: rows } = await supabase.rpc("get_invitation_by_token", {
+    p_token: params.token,
+  });
+  const invite = rows?.[0];
 
   if (!invite) return NextResponse.json({ error: "Invitation not found" }, { status: 404 });
   if (invite.status !== "pending") {
@@ -39,6 +38,17 @@ export async function POST(
 
   if (!invite || invite.status !== "pending") {
     return NextResponse.json({ error: "Invalid invitation" }, { status: 400 });
+  }
+
+  if (new Date(invite.expires_at) < new Date()) {
+    return NextResponse.json({ error: "Invitation has expired" }, { status: 410 });
+  }
+
+  if (invite.email.toLowerCase() !== user.email?.toLowerCase()) {
+    return NextResponse.json(
+      { error: "This invitation was sent to a different email address" },
+      { status: 403 }
+    );
   }
 
   await supabase

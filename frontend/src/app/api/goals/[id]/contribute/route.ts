@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getHouseholdId } from "@/lib/supabase/household";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const householdId = await getHouseholdId(supabase, user.id);
+  if (!householdId) return NextResponse.json({ error: "No household" }, { status: 404 });
 
   const body = await req.json();
   const amount = Number(body.amount);
@@ -14,6 +18,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .from("goals")
     .select("current_amount, target_amount")
     .eq("id", params.id)
+    .eq("household_id", householdId)
     .single();
 
   if (!goal) return NextResponse.json({ error: "Goal not found" }, { status: 404 });
@@ -28,6 +33,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       ...(isCompleted ? { status: "completed", completed_at: new Date().toISOString() } : {}),
     })
     .eq("id", params.id)
+    .eq("household_id", householdId)
     .select()
     .single();
 

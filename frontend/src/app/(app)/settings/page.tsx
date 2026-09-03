@@ -108,11 +108,12 @@ function SyncButton({ onSync }: { onSync: () => void }) {
     setResult("");
     try {
       const res = await fetch("/api/plaid/sync", { method: "POST" });
-      const d = await res.json();
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? `Server error ${res.status}`);
       setResult(`Synced ${d.synced} transactions`);
       onSync();
-    } catch {
-      setResult("Sync failed");
+    } catch (err: unknown) {
+      setResult((err as Error)?.message ?? "Sync failed");
     } finally {
       setSyncing(false);
     }

@@ -1,22 +1,19 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getOrCreateHouseholdId } from "@/lib/supabase/household";
 
 export async function GET() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: membership } = await supabase
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", user.id)
-    .single();
-  if (!membership) return NextResponse.json([]);
+  const householdId = await getOrCreateHouseholdId(supabase, user.id);
+  if (!householdId) return NextResponse.json([]);
 
   const { data, error } = await supabase
     .from("goals")
     .select("*")
-    .eq("household_id", membership.household_id)
+    .eq("household_id", householdId)
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -36,18 +33,14 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: membership } = await supabase
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", user.id)
-    .single();
-  if (!membership) return NextResponse.json({ error: "No household" }, { status: 404 });
+  const householdId = await getOrCreateHouseholdId(supabase, user.id);
+  if (!householdId) return NextResponse.json({ error: "No household" }, { status: 404 });
 
   const body = await req.json();
   const { data, error } = await supabase
     .from("goals")
     .insert({
-      household_id: membership.household_id,
+      household_id: householdId,
       created_by_id: user.id,
       name: body.name,
       description: body.description,

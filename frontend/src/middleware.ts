@@ -32,7 +32,11 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
-  const isPublicRoute = pathname === "/" || pathname.startsWith("/api") || isAuthRoute;
+  const isPublicRoute =
+    pathname === "/" ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/invite") ||
+    isAuthRoute;
 
   if (!isPublicRoute && !user) {
     return NextResponse.redirect(new URL("/login", request.url));

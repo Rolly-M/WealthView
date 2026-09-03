@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 import { createClient } from "@/lib/supabase/server";
+import { getOrCreateHouseholdId } from "@/lib/supabase/household";
 
 const plaid = new PlaidApi(
   new Configuration({
@@ -21,85 +22,74 @@ export async function POST(req: Request) {
 
   const { public_token } = await req.json();
 
-  const { data: membership } = await supabase
-    .from("household_members").select("household_id").eq("user_id", user.id).single();
-  if (!membership) return NextResponse.json({ error: "No household" }, { status: 404 });
+  const householdId = await getOrCreateHouseholdId(supabase, user.id);
+  if (!householdId) return NextResponse.json({ error: "No household" }, { status: 404 });
 
-  // Exchange public token for access token
-  const { data: exchangeData } = await plaid.itemPublicTokenExchange({ public_token });
-  const accessToken = exchangeData.access_token;
-  const itemId = exchangeData.item_id;
+  try {
+    // Exchange public token for access token
+    const { data: exchangeData } = await plaid.itemPublicTokenExchange({ public_token });
+    const accessToken = exchangeData.access_token;
+    const itemId = exchangeData.item_id;
 
-  // Fetch accounts from Plaid
-  const { data: accountsData } = await plaid.accountsGet({ access_token: accessToken });
+    // Fetch accounts from Plaid
+    const { data: accountsData } = await plaid.accountsGet({ access_token: accessToken });
 
-  const accountTypeMap: Record<string, string> = {
-    depository: "checking", credit: "credit", loan: "loan",
-    investment: "investment", other: "other",
-  };
-  const subtypeMap: Record<string, string> = {
-    checking: "checking", savings: "savings",
-    "credit card": "credit", mortgage: "mortgage", auto: "loan",
-  };
-
-  // Insert/update each Plaid account and build plaidId → supabaseUUID map
-  // Using select+insert/update instead of upsert (no unique constraint needed)
-  const plaidToUuid: Record<string, string> = {};
-
-  for (const acct of accountsData.accounts) {
-    const accountPayload = {
-      household_id: membership.household_id,
-      owner_id: user.id,
-      provider: "plaid",
-      provider_account_id: acct.account_id,
-      provider_access_token: accessToken,
-      name: acct.name,
-      official_name: acct.official_name ?? null,
-      type: accountTypeMap[acct.type] ?? "other",
-      subtype: subtypeMap[acct.subtype ?? ""] ?? acct.subtype ?? null,
-      currency: acct.balances.iso_currency_code ?? "USD",
-      current_balance: acct.balances.current ?? 0,
-      available_balance: acct.balances.available ?? null,
-      credit_limit: acct.balances.limit ?? null,
-      is_shared: true,
-      is_active: true,
-      last_synced_at: new Date().toISOString(),
+    const accountTypeMap: Record<string, string> = {
+      depository: "checking", credit: "credit", loan: "loan",
+      investment: "investment", other: "other",
+    };
+    const subtypeMap: Record<string, string> = {
+      checking: "checking", savings: "savings",
+      "credit card": "credit", mortgage: "mortgage", auto: "loan",
     };
 
-    // Check if this Plaid account already exists
-    const { data: existing } = await supabase
-      .from("accounts")
-      .select("id")
-      .eq("provider_account_id", acct.account_id)
-      .single();
+    // Insert/update each Plaid account and build plaidId → supabaseUUID map.
+    // Atomic upsert on provider_account_id — requires the unique constraint added
+    // by supabase/accounts_unique_provider_account_id.sql — so concurrent Link
+    // flows (double-click, retry, or a race with /plaid/sync) can't both see "no
+    // existing row" and insert duplicates.
+    const plaidToUuid: Record<string, string> = {};
 
-    if (existing) {
-      // Update balance + token
-      await supabase
+    for (const acct of accountsData.accounts) {
+      const accountPayload = {
+        household_id: householdId,
+        owner_id: user.id,
+        provider: "plaid",
+        provider_account_id: acct.account_id,
+        provider_access_token: accessToken,
+        name: acct.name,
+        official_name: acct.official_name ?? null,
+        type: accountTypeMap[acct.type] ?? "other",
+        subtype: subtypeMap[acct.subtype ?? ""] ?? acct.subtype ?? null,
+        currency: acct.balances.iso_currency_code ?? "USD",
+        current_balance: acct.balances.current ?? 0,
+        available_balance: acct.balances.available ?? null,
+        credit_limit: acct.balances.limit ?? null,
+        is_shared: true,
+        is_active: true,
+        last_synced_at: new Date().toISOString(),
+      };
+
+      const { data: upserted } = await supabase
         .from("accounts")
-        .update({
-          current_balance: accountPayload.current_balance,
-          available_balance: accountPayload.available_balance,
-          provider_access_token: accessToken,
-          last_synced_at: accountPayload.last_synced_at,
-        })
-        .eq("id", existing.id);
-      plaidToUuid[acct.account_id] = existing.id;
-    } else {
-      // Insert new account
-      const { data: inserted } = await supabase
-        .from("accounts")
-        .insert(accountPayload)
+        .upsert(accountPayload, { onConflict: "provider_account_id" })
         .select("id")
         .single();
-      if (inserted) plaidToUuid[acct.account_id] = inserted.id;
+
+      if (upserted) plaidToUuid[acct.account_id] = upserted.id;
     }
+
+    // Sync initial transactions using the correct UUID mapping
+    await syncTransactions(supabase, plaid, accessToken, householdId, plaidToUuid);
+
+    return NextResponse.json({ accounts: Object.keys(plaidToUuid).length, item_id: itemId });
+  } catch (err: unknown) {
+    const plaidErr = (err as { response?: { data?: unknown } })?.response?.data;
+    const message = plaidErr
+      ? JSON.stringify(plaidErr)
+      : (err as Error)?.message ?? "Plaid API error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  // Sync initial transactions using the correct UUID mapping
-  await syncTransactions(supabase, plaid, accessToken, membership.household_id, plaidToUuid);
-
-  return NextResponse.json({ accounts: Object.keys(plaidToUuid).length, item_id: itemId });
 }
 
 async function syncTransactions(
