@@ -12,21 +12,13 @@
 -- household's data.
 
 -- ── Helper: is the current user a member of this household? ────────────────
--- SECURITY DEFINER so it can read household_members even though household_members
--- itself has RLS enabled (avoids policy recursion).
-create or replace function public.is_household_member(hh_id uuid)
-returns boolean
-language sql
-security definer
-set search_path = public
-stable
-as $$
-  select exists (
-    select 1 from public.household_members
-    where household_id = hh_id
-      and user_id = auth.uid()
-  );
-$$;
+-- public.is_household_member(uuid) already exists in this database (it's what
+-- chat.sql's chat_threads_all / chat_messages_all policies call) — reused
+-- as-is rather than redefined, since CREATE OR REPLACE can't rename an
+-- existing function's parameter and DROP ... CASCADE would risk taking any
+-- policies built on it with it. Every call below passes household_id
+-- positionally, so it doesn't matter what the existing function calls its
+-- parameter internally.
 
 -- ── households ───────────────────────────────────────────────────────────
 alter table public.households enable row level security;
