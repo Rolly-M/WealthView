@@ -32,18 +32,32 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
+  const isMfaRoute = pathname.startsWith("/mfa-challenge");
   const isPublicRoute =
     pathname === "/" ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/invite") ||
-    isAuthRoute;
+    isAuthRoute ||
+    isMfaRoute;
 
   if (!isPublicRoute && !user) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (isAuthRoute && user) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+  if (user) {
+    // A password-only ("aal1") session on an account with TOTP enrolled
+    // isn't fully authenticated yet — force it through /mfa-challenge
+    // before it can reach anything else, regardless of what the client
+    // thinks its auth state is.
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    const needsMfa = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2";
+
+    if (needsMfa && !isMfaRoute) {
+      return NextResponse.redirect(new URL("/mfa-challenge", request.url));
+    }
+    if (!needsMfa && (isAuthRoute || isMfaRoute)) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
   }
 
   return supabaseResponse;

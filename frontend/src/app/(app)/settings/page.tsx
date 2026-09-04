@@ -8,6 +8,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { Account, Household, User } from "@/types";
 import { usePlaidLink } from "react-plaid-link";
+import { createClient } from "@/lib/supabase/client";
 
 // ─── Plaid Link button ────────────────────────────────────────────────────────
 // Inner component — only mounted once we have a valid token
@@ -375,6 +376,7 @@ export default function SettingsPage() {
       {tab === "privacy" && (
         <div className="card space-y-4">
           <h2 className="font-semibold text-gray-900">Privacy Controls</h2>
+          <MfaSection />
           <div className="space-y-3 text-sm text-gray-600">
             {[
               { title: "Account visibility", body: "Control which accounts your partner can see. Toggle per-account in the Accounts tab." },
@@ -388,6 +390,166 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Two-factor authentication (TOTP) ──────────────────────────────────────────
+function MfaSection() {
+  const [factors, setFactors] = useState<{ id: string; status: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [enrolling, setEnrolling] = useState(false);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [secret, setSecret] = useState<string | null>(null);
+  const [factorId, setFactorId] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [verifying, setVerifying] = useState(false);
+
+  const loadFactors = useCallback(async () => {
+    const supabase = createClient();
+    const { data } = await supabase.auth.mfa.listFactors();
+    setFactors((data?.totp ?? []).filter((f) => f.status === "verified"));
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadFactors();
+  }, [loadFactors]);
+
+  async function startEnroll() {
+    setError("");
+    setEnrolling(true);
+    const supabase = createClient();
+    const { data, error: enrollError } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+    if (enrollError) {
+      setError(enrollError.message);
+      setEnrolling(false);
+      return;
+    }
+    setFactorId(data.id);
+    setQrCode(data.totp.qr_code);
+    setSecret(data.totp.secret);
+  }
+
+  function cancelEnroll() {
+    setEnrolling(false);
+    setQrCode(null);
+    setSecret(null);
+    setFactorId(null);
+    setCode("");
+    setError("");
+  }
+
+  async function verifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!factorId) return;
+    setVerifying(true);
+    setError("");
+    const supabase = createClient();
+
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
+    if (challengeError) {
+      setError(challengeError.message);
+      setVerifying(false);
+      return;
+    }
+
+    const { error: verifyError } = await supabase.auth.mfa.verify({
+      factorId,
+      challengeId: challenge.id,
+      code,
+    });
+    if (verifyError) {
+      setError(verifyError.message);
+      setVerifying(false);
+      return;
+    }
+
+    setVerifying(false);
+    cancelEnroll();
+    loadFactors();
+  }
+
+  async function removeFactor(id: string) {
+    if (!confirm("Turn off two-factor authentication? You'll only need your password to sign in.")) return;
+    const supabase = createClient();
+    await supabase.auth.mfa.unenroll({ factorId: id });
+    loadFactors();
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+      <div className="flex items-center justify-between mb-1">
+        <p className="font-medium text-gray-900">Two-factor authentication</p>
+        {factors.length > 0 && (
+          <span className="badge bg-emerald-100 text-emerald-700">Enabled</span>
+        )}
+      </div>
+      <p className="text-xs text-gray-500 mb-3">
+        Require a code from an authenticator app (Google Authenticator, Authy, 1Password, etc.) when signing in.
+      </p>
+
+      {error && (
+        <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs mb-3">{error}</div>
+      )}
+
+      {factors.length > 0 && !enrolling && (
+        <div className="space-y-2">
+          {factors.map((f) => (
+            <div key={f.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-gray-100">
+              <span className="text-xs text-gray-600">Authenticator app</span>
+              <button onClick={() => removeFactor(f.id)} className="text-xs text-red-600 hover:underline">
+                Turn off
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {factors.length === 0 && !enrolling && (
+        <button onClick={startEnroll} className="btn-secondary text-xs py-2">
+          Enable two-factor authentication
+        </button>
+      )}
+
+      {enrolling && (
+        <div className="space-y-3">
+          {qrCode && (
+            <div className="flex flex-col items-center gap-2 p-3 bg-white rounded-lg border border-gray-100">
+              {/* eslint-disable-next-line @next/next/no-img-element -- data: URI SVG from Supabase, not an optimizable asset */}
+              <img src={qrCode} alt="Scan with your authenticator app" width={160} height={160} />
+              <p className="text-[11px] text-gray-400 text-center">
+                Can&apos;t scan? Enter this code manually:
+                <br />
+                <code className="text-gray-600 break-all">{secret}</code>
+              </p>
+            </div>
+          )}
+          <form onSubmit={verifyCode} className="flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              placeholder="6-digit code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="input flex-1"
+              required
+              autoFocus
+            />
+            <button type="submit" disabled={verifying} className="btn-primary text-xs py-2 flex-shrink-0">
+              {verifying ? "Verifying…" : "Verify"}
+            </button>
+          </form>
+          <button onClick={cancelEnroll} className="text-xs text-gray-400 hover:underline">
+            Cancel
+          </button>
         </div>
       )}
     </div>

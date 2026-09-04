@@ -9,7 +9,7 @@ interface AuthState {
   isAuthenticated: boolean;
   loading: boolean;
   initialize: () => Promise<() => void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ needsMfa: boolean }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ needsConfirmation: boolean }>;
   clearAuth: () => Promise<void>;
   setUser: (user: User | null) => void;
@@ -25,7 +25,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
-      const profile = await fetchProfile();
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const needsMfa = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2";
+      const profile = needsMfa ? null : await fetchProfile();
       if (profile) {
         set({ user: profile, isAuthenticated: true, loading: false });
       } else {
@@ -57,8 +59,18 @@ export const useAuthStore = create<AuthState>((set) => ({
       e.response = { data: { detail: error.message } };
       throw e;
     }
+
+    // If the account has TOTP enabled, the session Supabase issues here is
+    // only "aal1" (password-only) — leave isAuthenticated false until the
+    // /mfa-challenge page steps the session up to "aal2".
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal && aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
+      return { needsMfa: true };
+    }
+
     const profile = await fetchProfile();
     if (profile) set({ user: profile, isAuthenticated: true });
+    return { needsMfa: false };
   },
 
   signUp: async (email, password, fullName) => {

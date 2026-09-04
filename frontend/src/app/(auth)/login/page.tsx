@@ -32,8 +32,8 @@ function LoginForm() {
     setLoading(true);
     setError("");
     try {
-      await signIn(email, password);
-      router.push("/dashboard");
+      const { needsMfa } = await signIn(email, password);
+      router.push(needsMfa ? "/mfa-challenge" : "/dashboard");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } }; message?: string })
         ?.response?.data?.detail ?? (err as Error)?.message ?? "Login failed.";
