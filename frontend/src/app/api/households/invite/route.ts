@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     supabase.from("profiles").select("full_name").eq("id", user.id).single(),
   ]);
 
-  const { sent } = await sendEmail({
+  const { sent, error: emailError } = await sendEmail({
     to: body.email,
     subject: `${profileRes.data?.full_name ?? "Your partner"} invited you to WealthView Duo`,
     html: inviteEmailHtml({
@@ -56,5 +56,8 @@ export async function POST(req: Request) {
     }),
   });
 
-  return NextResponse.json({ ...data, invite_url: inviteUrl, email_sent: sent }, { status: 201 });
+  return NextResponse.json(
+    { ...data, invite_url: inviteUrl, email_sent: sent, email_error: emailError },
+    { status: 201 }
+  );
 }

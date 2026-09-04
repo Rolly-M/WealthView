@@ -178,7 +178,7 @@ export default function SettingsPage() {
       setInviteStatus(
         data.email_sent
           ? `Invitation sent to ${inviteEmail}`
-          : `Invite created, but the email couldn't be sent. Share this link directly: ${data.invite_url}`
+          : `Invite created, but the email couldn't be sent (${data.email_error ?? "unknown error"}). Share this link directly: ${data.invite_url}`
       );
       setInviteEmail("");
       load();

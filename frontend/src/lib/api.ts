@@ -57,7 +57,10 @@ export const householdsApi = {
   mine: () => get<Household>("/api/households"),
   update: (data: object) => patch<Household>("/api/households", data),
   invite: (data: object) =>
-    post<{ id: string; invite_url: string; email_sent: boolean }>("/api/households/invite", data),
+    post<{ id: string; invite_url: string; email_sent: boolean; email_error: string | null }>(
+      "/api/households/invite",
+      data
+    ),
   previewInvite: (token: string) => get<Household>(`/api/households/invite/${token}`),
 };
 

@@ -3,8 +3,9 @@ const RESEND_API_URL = "https://api.resend.com/emails";
 export async function sendEmail(params: { to: string; subject: string; html: string }) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.error("RESEND_API_KEY is not set — skipping email send:", params.subject, "to", params.to);
-    return { sent: false };
+    const error = "RESEND_API_KEY is not set";
+    console.error(error, "— skipping email send:", params.subject, "to", params.to);
+    return { sent: false, error };
   }
 
   const res = await fetch(RESEND_API_URL, {
@@ -24,10 +25,11 @@ export async function sendEmail(params: { to: string; subject: string; html: str
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     console.error("Resend send failed:", res.status, body);
-    return { sent: false };
+    const error = (body as { message?: string })?.message ?? `Resend API error (${res.status})`;
+    return { sent: false, error };
   }
 
-  return { sent: true };
+  return { sent: true, error: null as string | null };
 }
 
 export function inviteEmailHtml(params: {
