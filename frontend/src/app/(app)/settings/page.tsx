@@ -556,6 +556,49 @@ function MfaSection() {
   );
 }
 
+// ─── Email verification status ─────────────────────────────────────────────────
+function EmailVerificationStatus({ user }: { user: User | null }) {
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState("");
+
+  if (!user) return null;
+
+  async function resend() {
+    setSending(true);
+    setStatus("");
+    try {
+      const res = await fetch("/api/auth/send-verification", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? "Failed to send verification email");
+      setStatus(d.sent ? "Verification email sent — check your inbox." : "Couldn't send the email right now, try again shortly.");
+    } catch (err: unknown) {
+      setStatus((err as Error)?.message ?? "Something went wrong");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (user.is_verified) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+        <span>✓</span> Email verified
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-amber-800">Your email isn&apos;t verified yet.</p>
+        <button onClick={resend} disabled={sending} className="text-xs font-medium text-amber-800 hover:underline flex-shrink-0">
+          {sending ? "Sending…" : "Resend email"}
+        </button>
+      </div>
+      {status && <p className="text-xs text-amber-700 mt-1.5">{status}</p>}
+    </div>
+  );
+}
+
 function ProfileTab({ user, setUser }: { user: User | null; setUser: (u: User | null) => void }) {
   const router = useRouter();
   const { clearAuth } = useAuthStore();
@@ -618,6 +661,8 @@ function ProfileTab({ user, setUser }: { user: User | null; setUser: (u: User | 
           </button>
         </form>
       </div>
+
+      <EmailVerificationStatus user={user} />
 
       {/* Danger zone */}
       <div className="card border border-red-200">

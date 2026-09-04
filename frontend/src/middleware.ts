@@ -37,6 +37,7 @@ export async function middleware(request: NextRequest) {
     pathname === "/" ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/invite") ||
+    pathname.startsWith("/verify-email") ||
     isAuthRoute ||
     isMfaRoute;
 

@@ -44,6 +44,9 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: `${form.full_name}'s Household` }),
       });
+      // Fire-and-forget our own branded verification email — don't block
+      // getting into the app on it.
+      fetch("/api/auth/send-verification", { method: "POST" }).catch(() => {});
       router.push("/dashboard");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } }; message?: string })

@@ -20,7 +20,7 @@ export async function GET() {
     avatar_url: profile?.avatar_url ?? null,
     currency: profile?.currency ?? "USD",
     locale: profile?.locale ?? "en-US",
-    is_verified: !!user.email_confirmed_at,
+    is_verified: !!profile?.email_verified,
     created_at: user.created_at,
   });
 }

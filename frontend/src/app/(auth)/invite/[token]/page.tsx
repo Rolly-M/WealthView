@@ -57,6 +57,9 @@ function InviteForm({ token }: { token: string }) {
         throw new Error(body.error ?? "Failed to join household");
       }
 
+      // Fire-and-forget our own branded verification email — don't block
+      // getting into the household on it.
+      fetch("/api/auth/send-verification", { method: "POST" }).catch(() => {});
       router.push("/dashboard");
     } catch (err: unknown) {
       setError((err as Error)?.message ?? "Failed to accept invitation");
