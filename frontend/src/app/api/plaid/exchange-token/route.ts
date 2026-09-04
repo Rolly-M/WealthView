@@ -127,9 +127,10 @@ async function syncTransactions(
       }));
 
     if (toInsert.length > 0) {
-      await supabase
+      const { error } = await supabase
         .from("transactions")
         .upsert(toInsert, { onConflict: "provider_transaction_id" });
+      if (error) throw error;
     }
 
     cursor = data.next_cursor;

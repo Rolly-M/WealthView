@@ -95,10 +95,11 @@ export async function POST() {
           }));
 
         if (toInsert.length > 0) {
-          const { data: upserted } = await supabase
+          const { data: upserted, error } = await supabase
             .from("transactions")
             .upsert(toInsert, { onConflict: "provider_transaction_id" })
             .select("id");
+          if (error) throw error;
           totalNew += upserted?.length ?? 0;
         }
 
