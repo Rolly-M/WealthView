@@ -62,7 +62,7 @@ export const householdsApi = {
       data
     ),
   previewInvite: (token: string) => get<Household>(`/api/households/invite/${token}`),
-  cancelInvite: (id: string) => del(`/api/households/invite/${id}`),
+  cancelInvite: (id: string) => del(`/api/households/invite/cancel/${id}`),
 };
 
 export const accountsApi = {
