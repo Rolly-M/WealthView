@@ -70,12 +70,13 @@ export async function POST(req: Request) {
         last_synced_at: new Date().toISOString(),
       };
 
-      const { data: upserted } = await supabase
+      const { data: upserted, error: upsertError } = await supabase
         .from("accounts")
         .upsert(accountPayload, { onConflict: "provider_account_id" })
         .select("id")
         .single();
 
+      if (upsertError) throw upsertError;
       if (upserted) plaidToUuid[acct.account_id] = upserted.id;
     }
 

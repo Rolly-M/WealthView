@@ -24,13 +24,14 @@ export async function POST() {
   if (!householdId) return NextResponse.json({ error: "No household" }, { status: 404 });
 
   // Get all Plaid-connected accounts for this household
-  const { data: accounts } = await supabase
+  const { data: accounts, error: accountsError } = await supabase
     .from("accounts")
     .select("id, provider_account_id, provider_access_token, current_balance")
     .eq("household_id", householdId)
     .eq("provider", "plaid")
     .eq("is_active", true);
 
+  if (accountsError) return NextResponse.json({ error: accountsError.message }, { status: 400 });
   if (!accounts?.length) return NextResponse.json({ synced: 0 });
 
   try {
@@ -46,7 +47,7 @@ export async function POST() {
       // Refresh balances
       const { data: balData } = await plaid.accountsGet({ access_token: token });
       for (const b of balData.accounts) {
-        await supabase
+        const { error: balanceError } = await supabase
           .from("accounts")
           .update({
             current_balance: b.balances.current ?? 0,
@@ -54,14 +55,16 @@ export async function POST() {
             last_synced_at: new Date().toISOString(),
           })
           .eq("provider_account_id", b.account_id);
+        if (balanceError) console.error("Failed to update balance for", b.account_id, balanceError.message);
       }
 
       // Build plaid account_id → our Supabase UUID map for this token
-      const { data: ourAccounts } = await supabase
+      const { data: ourAccounts, error: ourAccountsError } = await supabase
         .from("accounts")
         .select("id, provider_account_id")
         .eq("household_id", householdId)
         .eq("provider", "plaid");
+      if (ourAccountsError) throw ourAccountsError;
       const plaidToUuid = Object.fromEntries(
         (ourAccounts ?? []).map((a) => [a.provider_account_id, a.id])
       );
