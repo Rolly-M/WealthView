@@ -173,8 +173,12 @@ export default function SettingsPage() {
     setInviting(true);
     setInviteStatus("");
     try {
-      await householdsApi.invite({ email: inviteEmail, role: "editor" });
-      setInviteStatus(`Invitation sent to ${inviteEmail}`);
+      const { data } = await householdsApi.invite({ email: inviteEmail, role: "editor" });
+      setInviteStatus(
+        data.email_sent
+          ? `Invitation sent to ${inviteEmail}`
+          : `Invite created, but the email couldn't be sent. Share this link directly: ${data.invite_url}`
+      );
       setInviteEmail("");
       load();
     } catch (err: unknown) {
