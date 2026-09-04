@@ -22,7 +22,13 @@ export const metadata: Metadata = {
   keywords: ["budgeting", "couples finance", "financial planning", "spending tracker"],
   icons: {
     icon: "/icon.svg",
-    apple: "/icon.svg",
+    apple: "/icon-512.png",
+  },
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "WealthView Duo",
   },
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_APP_URL ?? "https://wealthviewduo.vercel.app"
