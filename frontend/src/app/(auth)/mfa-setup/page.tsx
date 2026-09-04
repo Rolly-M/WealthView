@@ -27,7 +27,7 @@ export default function MfaSetupPage() {
 
       // Clean up any abandoned unverified factors from a previous attempt
       // so we always show a fresh, correctly-scanned QR code.
-      for (const f of factorsData?.totp.filter((f) => f.status === "unverified") ?? []) {
+      for (const f of factorsData?.totp.filter((f) => f.status !== "verified") ?? []) {
         await supabase.auth.mfa.unenroll({ factorId: f.id });
       }
 
