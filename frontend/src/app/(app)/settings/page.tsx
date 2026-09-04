@@ -189,6 +189,16 @@ export default function SettingsPage() {
     }
   }
 
+  async function cancelInvite(id: string) {
+    if (!confirm("Cancel this invitation? The link will stop working.")) return;
+    try {
+      await householdsApi.cancelInvite(id);
+      load();
+    } catch (err: unknown) {
+      setInviteStatus("Failed to cancel: " + ((err as Error)?.message ?? "Unknown error"));
+    }
+  }
+
   const TABS = [
     { key: "accounts", label: "Accounts", icon: Link2 },
     { key: "household", label: "Household", icon: UserPlus },
@@ -352,12 +362,22 @@ export default function SettingsPage() {
               {(household.pending_invitations ?? []).length > 0 && (
                 <div className="mt-4 border-t border-gray-100 pt-4">
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">Pending invitations</h3>
-                  {household.pending_invitations.map((inv) => (
-                    <div key={inv.id} className="flex items-center justify-between p-2 rounded-lg bg-amber-50 border border-amber-100">
-                      <span className="text-xs text-amber-800">{inv.email}</span>
-                      <span className="badge bg-amber-100 text-amber-700 text-[10px]">Pending</span>
-                    </div>
-                  ))}
+                  <div className="space-y-1.5">
+                    {household.pending_invitations.map((inv) => (
+                      <div key={inv.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-amber-50 border border-amber-100">
+                        <span className="text-xs text-amber-800 truncate">{inv.email}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="badge bg-amber-100 text-amber-700 text-[10px]">Pending</span>
+                          <button
+                            onClick={() => cancelInvite(inv.id)}
+                            className="text-xs text-red-600 hover:underline"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -376,7 +396,7 @@ export default function SettingsPage() {
       {tab === "privacy" && (
         <div className="card space-y-4">
           <h2 className="font-semibold text-gray-900">Privacy Controls</h2>
-          <MfaSection />
+          <MfaSection required={!!user?.mfa_required} />
           <div className="space-y-3 text-sm text-gray-600">
             {[
               { title: "Account visibility", body: "Control which accounts your partner can see. Toggle per-account in the Accounts tab." },
@@ -397,7 +417,7 @@ export default function SettingsPage() {
 }
 
 // ─── Two-factor authentication (TOTP) ──────────────────────────────────────────
-function MfaSection() {
+function MfaSection({ required }: { required: boolean }) {
   const [factors, setFactors] = useState<{ id: string; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
@@ -492,6 +512,7 @@ function MfaSection() {
       </div>
       <p className="text-xs text-gray-500 mb-3">
         Require a code from an authenticator app (Google Authenticator, Authy, 1Password, etc.) when signing in.
+        {required && " Required for this account — set up at signup."}
       </p>
 
       {error && (
@@ -503,9 +524,13 @@ function MfaSection() {
           {factors.map((f) => (
             <div key={f.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-gray-100">
               <span className="text-xs text-gray-600">Authenticator app</span>
-              <button onClick={() => removeFactor(f.id)} className="text-xs text-red-600 hover:underline">
-                Turn off
-              </button>
+              {required ? (
+                <span className="text-xs text-gray-400">Required</span>
+              ) : (
+                <button onClick={() => removeFactor(f.id)} className="text-xs text-red-600 hover:underline">
+                  Turn off
+                </button>
+              )}
             </div>
           ))}
         </div>

@@ -21,6 +21,7 @@ export async function GET() {
     currency: profile?.currency ?? "USD",
     locale: profile?.locale ?? "en-US",
     is_verified: !!profile?.email_verified,
+    mfa_required: !!profile?.mfa_required,
     created_at: user.created_at,
   });
 }

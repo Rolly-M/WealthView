@@ -6,6 +6,7 @@ export interface User {
   currency: string;
   locale: string;
   is_verified: boolean;
+  mfa_required?: boolean;
   created_at: string;
 }
 

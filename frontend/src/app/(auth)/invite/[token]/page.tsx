@@ -60,7 +60,10 @@ function InviteForm({ token }: { token: string }) {
       // Fire-and-forget our own branded verification email — don't block
       // getting into the household on it.
       fetch("/api/auth/send-verification", { method: "POST" }).catch(() => {});
-      router.push("/dashboard");
+      // MFA is mandatory on password-created accounts — flag it, then send
+      // straight to enrollment.
+      await fetch("/api/auth/require-mfa", { method: "POST" });
+      router.push("/mfa-setup");
     } catch (err: unknown) {
       setError((err as Error)?.message ?? "Failed to accept invitation");
     } finally {

@@ -32,31 +32,50 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
-  const isMfaRoute = pathname.startsWith("/mfa-challenge");
+  const isMfaChallengeRoute = pathname.startsWith("/mfa-challenge");
+  const isMfaSetupRoute = pathname.startsWith("/mfa-setup");
   const isPublicRoute =
     pathname === "/" ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/invite") ||
     pathname.startsWith("/verify-email") ||
     isAuthRoute ||
-    isMfaRoute;
+    isMfaChallengeRoute ||
+    isMfaSetupRoute;
 
   if (!isPublicRoute && !user) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
   if (user) {
-    // A password-only ("aal1") session on an account with TOTP enrolled
-    // isn't fully authenticated yet — force it through /mfa-challenge
-    // before it can reach anything else, regardless of what the client
-    // thinks its auth state is.
+    // A password-only ("aal1") session on an account with a verified TOTP
+    // factor isn't fully authenticated yet — force it through
+    // /mfa-challenge before it can reach anything else, regardless of what
+    // the client thinks its auth state is.
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    const needsMfa = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2";
+    const hasVerifiedFactor = aal?.nextLevel === "aal2";
+    const needsStepUp = aal?.currentLevel === "aal1" && hasVerifiedFactor;
 
-    if (needsMfa && !isMfaRoute) {
-      return NextResponse.redirect(new URL("/mfa-challenge", request.url));
+    // No factor at all yet, on an account created after MFA became
+    // mandatory (password registration / invite-accept) — force enrollment
+    // via /mfa-setup. Re-triggers automatically if a required account later
+    // removes its only factor, which is intentional: a mandatory control
+    // shouldn't be permanently disable-able by the user it applies to.
+    let needsSetup = false;
+    if (!needsStepUp && !hasVerifiedFactor) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("mfa_required")
+        .eq("id", user.id)
+        .single();
+      needsSetup = !!profile?.mfa_required;
     }
-    if (!needsMfa && (isAuthRoute || isMfaRoute)) {
+
+    if (needsStepUp) {
+      if (!isMfaChallengeRoute) return NextResponse.redirect(new URL("/mfa-challenge", request.url));
+    } else if (needsSetup) {
+      if (!isMfaSetupRoute) return NextResponse.redirect(new URL("/mfa-setup", request.url));
+    } else if (isAuthRoute || isMfaChallengeRoute || isMfaSetupRoute) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
