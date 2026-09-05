@@ -150,7 +150,7 @@ export default function ChatPage() {
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
           <Sparkles size={16} className="text-brand-600" />
-          <span className="font-semibold text-sm text-gray-900">Finance Chat</span>
+          <span className="font-semibold text-sm text-gray-900">Ask WealthView</span>
           <span className="text-xs text-gray-400 ml-auto">
             Ask about your spending, savings, goals, or subscriptions
           </span>

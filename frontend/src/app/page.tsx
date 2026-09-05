@@ -124,7 +124,7 @@ const FEATURES = [
   },
   {
     emoji: "💬",
-    title: "Finance chat",
+    title: "Ask WealthView",
     desc: "Ask your data anything. 'What did we spend on dining?' 'How's our savings rate?' Answers in seconds.",
   },
   {

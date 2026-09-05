@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building2, AlertTriangle, Copy, Check, Mail, MessageCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building2, AlertTriangle, Copy, Check, Mail, MessageCircle, LayoutDashboard } from "lucide-react";
 import { accountsApi, householdsApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 import { formatCurrency, formatSignedCurrency, cn, groupAccounts, ALL_OWNERS_KEY } from "@/lib/utils";
@@ -143,15 +143,7 @@ export default function SettingsPage() {
   const [inviteUrl, setInviteUrl] = useState("");
   const [expandedInviteId, setExpandedInviteId] = useState<string | null>(null);
   const [appOrigin, setAppOrigin] = useState("");
-  const [expandedBanks, setExpandedBanks] = useState<Set<string>>(new Set());
-
-  function toggleBank(key: string) {
-    setExpandedBanks((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  }
+  const [selectedBankKey, setSelectedBankKey] = useState("");
 
   useEffect(() => { setAppOrigin(window.location.origin); }, []);
 
@@ -173,6 +165,11 @@ export default function SettingsPage() {
 
   async function toggleShared(account: Account) {
     await accountsApi.update(account.id, { is_shared: !account.is_shared });
+    load();
+  }
+
+  async function toggleDashboardVisible(account: Account) {
+    await accountsApi.update(account.id, { include_in_net_worth: !account.include_in_net_worth });
     load();
   }
 
@@ -258,95 +255,108 @@ export default function SettingsPage() {
                 <p className="text-xs mb-4">Connect your bank to start tracking transactions automatically.</p>
                 <PlaidLinkButton onSuccess={load} variant="large" />
               </div>
-            ) : (
-              <div className="space-y-5">
-                {groupAccounts(accounts, household).map(([ownerLabel, banks]) => (
-                  <div key={ownerLabel}>
-                    {ownerLabel !== ALL_OWNERS_KEY && (
-                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{ownerLabel}</h3>
-                    )}
-                    <div className="space-y-2">
-                      {banks.map(([bankLabel, bankAccounts]) => {
-                        const bankKey = `${ownerLabel}::${bankLabel}`;
-                        const expanded = expandedBanks.has(bankKey);
-                        const netBalance = bankAccounts.reduce((sum, a) => {
-                          const isLiability = a.type === "credit" || a.type === "loan" || a.type === "mortgage";
-                          return sum + (isLiability ? -Math.abs(a.current_balance) : a.current_balance);
-                        }, 0);
-                        return (
-                          <div key={bankLabel} className="rounded-xl border border-gray-100 overflow-hidden">
-                            <button
-                              onClick={() => toggleBank(bankKey)}
-                              className="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
-                            >
-                              <div className="flex items-center gap-1.5 text-xs font-medium text-gray-700">
-                                {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                                <Building2 size={12} />{bankLabel}
-                                <span className="text-gray-400 font-normal">
-                                  · {bankAccounts.length} account{bankAccounts.length === 1 ? "" : "s"}
-                                </span>
+            ) : (() => {
+              const bankGroups = groupAccounts(accounts, household).flatMap(([ownerLabel, banks]) =>
+                banks.map(([bankLabel, bankAccounts]) => ({
+                  key: `${ownerLabel}::${bankLabel}`,
+                  label: ownerLabel !== ALL_OWNERS_KEY ? `${ownerLabel} — ${bankLabel}` : bankLabel,
+                  accounts: bankAccounts,
+                }))
+              );
+              const active = bankGroups.find((g) => g.key === selectedBankKey) ?? bankGroups[0];
+              const netBalance = active
+                ? active.accounts.reduce((sum, a) => {
+                    const isLiability = a.type === "credit" || a.type === "loan" || a.type === "mortgage";
+                    return sum + (isLiability ? -Math.abs(a.current_balance) : a.current_balance);
+                  }, 0)
+                : 0;
+
+              return (
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
+                    <Building2 size={12} /> Select a bank
+                  </div>
+                  <select
+                    className="input mb-4"
+                    value={active?.key ?? ""}
+                    onChange={(e) => setSelectedBankKey(e.target.value)}
+                  >
+                    {bankGroups.map((g) => (
+                      <option key={g.key} value={g.key}>
+                        {g.label} · {g.accounts.length} account{g.accounts.length === 1 ? "" : "s"}
+                      </option>
+                    ))}
+                  </select>
+
+                  {active && (
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-semibold text-gray-900">{active.label}</p>
+                        <p className="text-sm font-semibold text-gray-600 tabular">{formatSignedCurrency(netBalance)}</p>
+                      </div>
+                      <div className="space-y-2">
+                        {active.accounts.map((acc) => (
+                          <div key={acc.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm text-gray-900">{acc.name}</p>
+                                <span className={cn(
+                                  "badge text-[10px]",
+                                  acc.type === "checking" ? "bg-blue-100 text-blue-700" :
+                                  acc.type === "savings" ? "bg-emerald-100 text-emerald-700" :
+                                  acc.type === "credit" ? "bg-amber-100 text-amber-700" :
+                                  "bg-gray-100 text-gray-600"
+                                )}>{acc.type}</span>
+                                {acc.provider === "plaid" && (
+                                  <span className="badge bg-teal-50 text-teal-700 text-[10px]">Live</span>
+                                )}
                               </div>
-                              <span className="text-xs font-semibold text-gray-600 tabular">
-                                {formatSignedCurrency(netBalance)}
+                              <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(Math.abs(acc.current_balance))}</p>
+                            </div>
+                            {acc.owner_id === user?.id ? (
+                              <>
+                                <button
+                                  onClick={() => toggleDashboardVisible(acc)}
+                                  className={cn(
+                                    "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
+                                    acc.include_in_net_worth ? "border-gray-200 text-gray-600 bg-white" : "border-amber-200 text-amber-700 bg-amber-50"
+                                  )}
+                                  title={acc.include_in_net_worth ? "Shown on your dashboard and net worth" : "Hidden from your dashboard and net worth"}
+                                >
+                                  {acc.include_in_net_worth ? <><LayoutDashboard size={12} />On dashboard</> : <><EyeOff size={12} />Hidden</>}
+                                </button>
+                                <button
+                                  onClick={() => toggleShared(acc)}
+                                  className={cn(
+                                    "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
+                                    acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
+                                  )}
+                                  title={acc.is_shared ? "Your partner can see this account" : "Only you can see this account"}
+                                >
+                                  {acc.is_shared ? <><Eye size={12} />Shared</> : <><EyeOff size={12} />Private</>}
+                                </button>
+                                <button
+                                  onClick={() => disconnect(acc)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            ) : (
+                              // Only visible here because its owner shared it — not
+                              // yours to toggle or disconnect.
+                              <span className="badge bg-brand-50 text-brand-600 text-[10px] flex-shrink-0">
+                                Partner&apos;s
                               </span>
-                            </button>
-                            {expanded && (
-                              <div className="space-y-2 p-2">
-                                {bankAccounts.map((acc) => (
-                                  <div key={acc.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <p className="font-medium text-sm text-gray-900">{acc.name}</p>
-                                        <span className={cn(
-                                          "badge text-[10px]",
-                                          acc.type === "checking" ? "bg-blue-100 text-blue-700" :
-                                          acc.type === "savings" ? "bg-emerald-100 text-emerald-700" :
-                                          acc.type === "credit" ? "bg-amber-100 text-amber-700" :
-                                          "bg-gray-100 text-gray-600"
-                                        )}>{acc.type}</span>
-                                        {acc.provider === "plaid" && (
-                                          <span className="badge bg-teal-50 text-teal-700 text-[10px]">Live</span>
-                                        )}
-                                      </div>
-                                      <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(Math.abs(acc.current_balance))}</p>
-                                    </div>
-                                    {acc.owner_id === user?.id ? (
-                                      <>
-                                        <button
-                                          onClick={() => toggleShared(acc)}
-                                          className={cn(
-                                            "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
-                                            acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
-                                          )}
-                                        >
-                                          {acc.is_shared ? <><Eye size={12} />Shared</> : <><EyeOff size={12} />Private</>}
-                                        </button>
-                                        <button
-                                          onClick={() => disconnect(acc)}
-                                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                        >
-                                          <Trash2 size={14} />
-                                        </button>
-                                      </>
-                                    ) : (
-                                      // Only visible here because its owner shared it — not
-                                      // yours to toggle or disconnect.
-                                      <span className="badge bg-brand-50 text-brand-600 text-[10px] flex-shrink-0">
-                                        Partner&apos;s
-                                      </span>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             <p className="text-xs text-gray-400 mt-3">
               <Shield size={11} className="inline mr-1" />

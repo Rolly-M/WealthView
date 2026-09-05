@@ -16,7 +16,7 @@ const NAV = [
   { href: "/budgets", label: "Budgets", icon: PieChart },
   { href: "/goals", label: "Goals", icon: Target },
   { href: "/insights", label: "Insights", icon: Lightbulb },
-  { href: "/chat", label: "Finance Chat", icon: MessageSquare },
+  { href: "/chat", label: "Ask WealthView", icon: MessageSquare },
   { href: "/investments", label: "Investments", icon: TrendingUp },
 ];
 

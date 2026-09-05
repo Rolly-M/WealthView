@@ -61,6 +61,13 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [expandedBanks, setExpandedBanks] = useState<Set<string>>(new Set());
 
+  // An account owner can hide an account from dashboards entirely (distinct
+  // from is_shared, which controls a partner's visibility) — reusing the
+  // same include_in_net_worth flag the net worth calculation already
+  // respects, since "counts toward net worth" and "worth showing on the
+  // dashboard" are the same judgment call for the owner either way.
+  const visibleAccounts = accounts.filter((a) => a.include_in_net_worth);
+
   function toggleBank(key: string) {
     setExpandedBanks((prev) => {
       const next = new Set(prev);
@@ -158,11 +165,11 @@ export default function DashboardPage() {
           <MetricCard
             label="Cash Available"
             value={formatCurrency(
-              accounts
+              visibleAccounts
                 .filter((a) => a.type === "checking" || a.type === "savings")
                 .reduce((s, a) => s + Number(a.current_balance), 0)
             )}
-            sub={`${accounts.filter((a) => a.type === "checking").length} checking account(s)`}
+            sub={`${visibleAccounts.filter((a) => a.type === "checking").length} checking account(s)`}
             icon={Wallet}
             color="emerald"
           />
@@ -364,14 +371,14 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {Array.from({ length: 4 }).map((_, i) => <div key={i} className="shimmer h-20 rounded-xl" />)}
           </div>
-        ) : accounts.length === 0 ? (
+        ) : visibleAccounts.length === 0 ? (
           <div className="flex flex-col items-center py-8 text-gray-400 text-sm">
             <Users size={32} className="mb-2 opacity-30" />
-            <p>No accounts linked yet</p>
+            <p>{accounts.length === 0 ? "No accounts linked yet" : "All linked accounts are hidden from the dashboard"}</p>
           </div>
         ) : (
           <div className="space-y-2">
-            {groupAccounts(accounts, null).map(([, banks]) =>
+            {groupAccounts(visibleAccounts, null).map(([, banks]) =>
               banks.map(([bankLabel, bankAccounts]) => {
                 const expanded = expandedBanks.has(bankLabel);
                 const netBalance = bankAccounts.reduce((sum, a) => {
