@@ -54,6 +54,13 @@ export async function POST(req: Request) {
     // by supabase/accounts_unique_provider_account_id.sql — so concurrent Link
     // flows (double-click, retry, or a race with /plaid/sync) can't both see "no
     // existing row" and insert duplicates.
+    //
+    // provider_account_id is only stable within one Plaid Item, though — fully
+    // re-linking the same institution (a fresh Link session, not a reconnect
+    // of an existing item) mints a new Item with brand-new account_ids for the
+    // same real accounts, so the upsert above wouldn't recognize it and would
+    // insert a second copy. Matching on (household, mask, name) first catches
+    // that case and updates the existing row in place instead.
     const plaidToUuid: Record<string, string> = {};
 
     for (const acct of accountsData.accounts) {
@@ -65,6 +72,7 @@ export async function POST(req: Request) {
         provider_access_token: accessToken,
         name: acct.name,
         official_name: acct.official_name ?? null,
+        mask: acct.mask ?? null,
         type: accountTypeMap[acct.type] ?? "other",
         subtype: subtypeMap[acct.subtype ?? ""] ?? acct.subtype ?? null,
         currency: acct.balances.iso_currency_code ?? "USD",
@@ -76,11 +84,24 @@ export async function POST(req: Request) {
         last_synced_at: new Date().toISOString(),
       };
 
-      const { data: upserted, error: upsertError } = await supabase
-        .from("accounts")
-        .upsert(accountPayload, { onConflict: "provider_account_id" })
-        .select("id")
-        .single();
+      let existingId: string | null = null;
+      if (acct.mask) {
+        const { data: existing } = await supabase
+          .from("accounts")
+          .select("id")
+          .eq("household_id", householdId)
+          .eq("provider", "plaid")
+          .eq("mask", acct.mask)
+          .eq("name", acct.name)
+          .eq("is_active", true)
+          .neq("provider_account_id", acct.account_id)
+          .maybeSingle();
+        existingId = existing?.id ?? null;
+      }
+
+      const { data: upserted, error: upsertError } = existingId
+        ? await supabase.from("accounts").update(accountPayload).eq("id", existingId).select("id").single()
+        : await supabase.from("accounts").upsert(accountPayload, { onConflict: "provider_account_id" }).select("id").single();
 
       if (upsertError) throw upsertError;
       if (upserted) plaidToUuid[acct.account_id] = upserted.id;
