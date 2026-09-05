@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getOrCreateMembership } from "@/lib/supabase/household";
+import { getOrCreateMembership, getOrCreateHouseholdId } from "@/lib/supabase/household";
 
 export async function GET() {
   const supabase = createClient();
@@ -98,16 +98,15 @@ export async function PATCH(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: membership } = await supabase
-    .from("household_members").select("household_id").eq("user_id", user.id).single();
-  if (!membership) return NextResponse.json({ error: "No household" }, { status: 404 });
+  const householdId = await getOrCreateHouseholdId(supabase, user.id);
+  if (!householdId) return NextResponse.json({ error: "No household" }, { status: 404 });
 
   const body = await req.json();
   const allowed = ["name", "currency", "country"];
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 
   const { data, error } = await supabase
-    .from("households").update(updates).eq("id", membership.household_id).select().single();
+    .from("households").update(updates).eq("id", householdId).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json(data);
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { getOrCreateHouseholdId } from "@/lib/supabase/household";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -9,17 +10,11 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: membership } = await supabase
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", user.id)
-    .single();
-  if (!membership) return NextResponse.json({ error: "No household" }, { status: 404 });
+  const hid = await getOrCreateHouseholdId(supabase, user.id);
+  if (!hid) return NextResponse.json({ error: "No household" }, { status: 404 });
 
   const { message, thread_id } = await req.json();
   if (!message?.trim()) return NextResponse.json({ error: "Message required" }, { status: 400 });
-
-  const hid = membership.household_id;
 
   // Fetch financial context in parallel
   const [accountsRes, txnRes, budgetsRes, goalsRes] = await Promise.all([

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getOrCreateHouseholdId } from "@/lib/supabase/household";
 
 // Rule-based insight generation from transaction data
 export async function GET(req: Request) {
@@ -7,12 +8,8 @@ export async function GET(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: membership } = await supabase
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", user.id)
-    .single();
-  if (!membership) return NextResponse.json([]);
+  const householdId = await getOrCreateHouseholdId(supabase, user.id);
+  if (!householdId) return NextResponse.json([]);
 
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
@@ -21,10 +18,10 @@ export async function GET(req: Request) {
   const lastMonthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 
   const [thisMonthTxns, lastMonthTxns, budgets, goals] = await Promise.all([
-    supabase.from("transactions").select("amount, category, is_income").eq("household_id", membership.household_id).gte("date", thisMonth).eq("is_hidden", false),
-    supabase.from("transactions").select("amount, category, is_income").eq("household_id", membership.household_id).gte("date", lastMonth).lt("date", lastMonthEnd).eq("is_hidden", false),
-    supabase.from("budgets").select("*, budget_categories(*)").eq("household_id", membership.household_id).eq("is_active", true),
-    supabase.from("goals").select("*").eq("household_id", membership.household_id).eq("status", "active"),
+    supabase.from("transactions").select("amount, category, is_income").eq("household_id", householdId).gte("date", thisMonth).eq("is_hidden", false),
+    supabase.from("transactions").select("amount, category, is_income").eq("household_id", householdId).gte("date", lastMonth).lt("date", lastMonthEnd).eq("is_hidden", false),
+    supabase.from("budgets").select("*, budget_categories(*)").eq("household_id", householdId).eq("is_active", true),
+    supabase.from("goals").select("*").eq("household_id", householdId).eq("status", "active"),
   ]);
 
   const insights: Array<{

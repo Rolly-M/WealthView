@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getOrCreateMembership } from "@/lib/supabase/household";
 import { randomBytes } from "crypto";
 
 export async function POST(req: Request) {
@@ -7,11 +8,7 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: membership } = await supabase
-    .from("household_members")
-    .select("household_id, role")
-    .eq("user_id", user.id)
-    .single();
+  const membership = await getOrCreateMembership(supabase, user.id);
 
   if (!membership) return NextResponse.json({ error: "No household" }, { status: 404 });
   if (membership.role !== "owner" && membership.role !== "editor") {

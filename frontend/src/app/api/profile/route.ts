@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getHouseholdId } from "@/lib/supabase/household";
 
 export async function GET() {
   const supabase = createClient();
@@ -54,25 +55,21 @@ export async function DELETE() {
   const admin = createAdminClient();
 
   // Find the user's household membership
-  const { data: membership } = await supabase
-    .from("household_members")
-    .select("household_id, role")
-    .eq("user_id", user.id)
-    .single();
+  const householdId = await getHouseholdId(supabase, user.id);
 
-  if (membership) {
+  if (householdId) {
     // Check how many members are in the household
     const { data: allMembers } = await supabase
       .from("household_members")
       .select("id")
-      .eq("household_id", membership.household_id);
+      .eq("household_id", householdId);
 
     if (allMembers && allMembers.length <= 1) {
       // Only member — delete the entire household (cascades to accounts, transactions, budgets, goals)
       await supabase
         .from("households")
         .delete()
-        .eq("id", membership.household_id);
+        .eq("id", householdId);
     } else {
       // Remove only this user's membership
       await supabase
