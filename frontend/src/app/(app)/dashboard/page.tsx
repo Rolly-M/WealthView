@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Wallet, Target, AlertCircle,
-  RefreshCw, Users, ChevronRight
+  RefreshCw, Users, ChevronRight, ChevronDown, Building2
 } from "lucide-react";
 import Link from "next/link";
 import { accountsApi, transactionsApi, insightsApi, goalsApi } from "@/lib/api";
@@ -59,6 +59,15 @@ export default function DashboardPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedBanks, setExpandedBanks] = useState<Set<string>>(new Set());
+
+  function toggleBank(key: string) {
+    setExpandedBanks((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
@@ -361,29 +370,52 @@ export default function DashboardPage() {
             <p>No accounts linked yet</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-2">
             {groupAccounts(accounts, null).map(([, banks]) =>
-              banks.map(([bankLabel, bankAccounts]) => (
-                <div key={bankLabel}>
-                  <p className="text-xs font-medium text-gray-500 mb-2">{bankLabel}</p>
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    {bankAccounts.map((acc) => (
-                      <div key={acc.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-brand-200 transition-colors">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-medium text-gray-500 truncate">{acc.name}</p>
-                          {!acc.is_shared && (
-                            <span className="badge bg-gray-100 text-gray-500 text-[10px]">Private</span>
-                          )}
-                        </div>
-                        <p className="text-base font-bold text-gray-900 tabular">
-                          {formatCurrency(Math.abs(Number(acc.current_balance)))}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-0.5 capitalize">{acc.type}</p>
+              banks.map(([bankLabel, bankAccounts]) => {
+                const expanded = expandedBanks.has(bankLabel);
+                const netBalance = bankAccounts.reduce((sum, a) => {
+                  const isLiability = a.type === "credit" || a.type === "loan" || a.type === "mortgage";
+                  return sum + (isLiability ? -Math.abs(a.current_balance) : a.current_balance);
+                }, 0);
+                return (
+                  <div key={bankLabel} className="rounded-xl border border-gray-100 overflow-hidden">
+                    <button
+                      onClick={() => toggleBank(bankLabel)}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-gray-700">
+                        {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                        <Building2 size={12} />{bankLabel}
+                        <span className="text-gray-400 font-normal">
+                          · {bankAccounts.length} account{bankAccounts.length === 1 ? "" : "s"}
+                        </span>
                       </div>
-                    ))}
+                      <span className="text-xs font-semibold text-gray-600 tabular">
+                        {formatSignedCurrency(netBalance)}
+                      </span>
+                    </button>
+                    {expanded && (
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-3">
+                        {bankAccounts.map((acc) => (
+                          <div key={acc.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-brand-200 transition-colors">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-medium text-gray-500 truncate">{acc.name}</p>
+                              {!acc.is_shared && (
+                                <span className="badge bg-gray-100 text-gray-500 text-[10px]">Private</span>
+                              )}
+                            </div>
+                            <p className="text-base font-bold text-gray-900 tabular">
+                              {formatCurrency(Math.abs(Number(acc.current_balance)))}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5 capitalize">{acc.type}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
