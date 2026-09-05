@@ -40,17 +40,33 @@ export async function GET(request: Request) {
           (!invite.email || invite.email.toLowerCase() === data.user.email?.toLowerCase());
 
         if (valid) {
-          await admin
-            .from("household_members")
-            .insert({ household_id: invite.household_id, user_id: data.user.id, role: invite.role });
-          await admin
+          // Atomic claim — conditioning the update on status still being
+          // "pending" makes Postgres the arbiter for concurrent accepts
+          // (e.g. this callback racing the email/password accept path for
+          // the same token) instead of both passing an earlier read-only
+          // status check before either had written "accepted".
+          const { data: claimed } = await admin
             .from("invitations")
             .update({ status: "accepted", accepted_at: new Date().toISOString() })
-            .eq("id", invite.id);
+            .eq("id", invite.id)
+            .eq("status", "pending")
+            .select()
+            .single();
 
-          // MFA is mandatory on invite-accept accounts, matching the
-          // email/password invite path.
-          return NextResponse.redirect(`${origin}/mfa-setup`);
+          if (claimed) {
+            const { error: insertError } = await admin
+              .from("household_members")
+              .insert({ household_id: invite.household_id, user_id: data.user.id, role: invite.role });
+
+            if (!insertError) {
+              // MFA is mandatory on invite-accept accounts, matching the
+              // email/password invite path.
+              return NextResponse.redirect(`${origin}/mfa-setup`);
+            }
+            // Give the invite back rather than burning it on an unrelated
+            // failure (e.g. this user is already a member of some household).
+            await admin.from("invitations").update({ status: "pending", accepted_at: null }).eq("id", invite.id);
+          }
         }
         // Invalid/expired/mismatched invite — still give the account a
         // household so it isn't left in a broken state, but flag it

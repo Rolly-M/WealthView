@@ -60,14 +60,34 @@ export async function POST(
     );
   }
 
-  await admin
+  // Atomic claim — the earlier status check and this update aren't the
+  // same operation, so two concurrent accepts (double-click, two tabs)
+  // could otherwise both pass the check before either had written
+  // "accepted", both then inserting a household_members row. Conditioning
+  // the update on status still being "pending" makes Postgres itself the
+  // arbiter: only one concurrent request can match and update the row.
+  const { data: claimed } = await admin
+    .from("invitations")
+    .update({ status: "accepted", accepted_at: new Date().toISOString() })
+    .eq("id", invite.id)
+    .eq("status", "pending")
+    .select()
+    .single();
+
+  if (!claimed) {
+    return NextResponse.json({ error: "This invitation has already been used" }, { status: 410 });
+  }
+
+  const { error: insertError } = await admin
     .from("household_members")
     .insert({ household_id: invite.household_id, user_id: user.id, role: invite.role });
 
-  await admin
-    .from("invitations")
-    .update({ status: "accepted", accepted_at: new Date().toISOString() })
-    .eq("id", invite.id);
+  if (insertError) {
+    // Give the invite back rather than burning it on an unrelated failure
+    // (e.g. this user is already a member of some household).
+    await admin.from("invitations").update({ status: "pending", accepted_at: null }).eq("id", invite.id);
+    return NextResponse.json({ error: insertError.message }, { status: 500 });
+  }
 
   return NextResponse.json({ household_id: invite.household_id });
 }

@@ -469,27 +469,42 @@ export default function SettingsPage() {
 
             <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
               <p className="font-medium text-gray-900 text-sm mb-1">Account visibility</p>
-              <p className="text-xs text-gray-500 mb-3">Control which accounts your partner can see.</p>
-              {accounts.length === 0 ? (
-                <p className="text-xs text-gray-400">No accounts linked yet.</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {accounts.map((acc) => (
-                    <div key={acc.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white border border-gray-100">
-                      <span className="text-xs text-gray-700 truncate">{acc.name}</span>
-                      <button
-                        onClick={() => toggleShared(acc)}
-                        className={cn(
-                          "flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border transition-all flex-shrink-0",
-                          acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
-                        )}
-                      >
-                        {acc.is_shared ? <><Eye size={11} />Shared</> : <><EyeOff size={11} />Private</>}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <p className="text-xs text-gray-500 mb-3">Control which of your own accounts your partner can see.</p>
+              {(() => {
+                const myAccounts = accounts.filter((a) => a.owner_id === user?.id);
+                if (myAccounts.length === 0) {
+                  return <p className="text-xs text-gray-400">No accounts linked yet.</p>;
+                }
+                return (
+                  <div className="space-y-3">
+                    {groupAccounts(myAccounts, null).map(([, banks]) =>
+                      banks.map(([bankLabel, bankAccounts]) => (
+                        <div key={bankLabel}>
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
+                            <Building2 size={11} />{bankLabel}
+                          </div>
+                          <div className="space-y-1.5">
+                            {bankAccounts.map((acc) => (
+                              <div key={acc.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white border border-gray-100">
+                                <span className="text-xs text-gray-700 truncate">{acc.name}</span>
+                                <button
+                                  onClick={() => toggleShared(acc)}
+                                  className={cn(
+                                    "flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border transition-all flex-shrink-0",
+                                    acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
+                                  )}
+                                >
+                                  {acc.is_shared ? <><Eye size={11} />Shared</> : <><EyeOff size={11} />Private</>}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
