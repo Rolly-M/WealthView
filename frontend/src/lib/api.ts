@@ -34,7 +34,13 @@ async function request<T>(
     throw error;
   }
 
-  const data = (await res.json()) as T;
+  // DELETE routes correctly respond 204 No Content with an empty body —
+  // res.json() throws "Unexpected end of JSON input" on that even though
+  // the request succeeded, which is exactly what was surfacing as
+  // "Failed to cancel"/"Failed to disconnect"/etc. on every delete action.
+  if (res.status === 204) return { data: undefined as T };
+  const text = await res.text();
+  const data = (text ? JSON.parse(text) : undefined) as T;
   return { data };
 }
 
