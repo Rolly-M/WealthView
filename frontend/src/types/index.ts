@@ -251,6 +251,7 @@ export interface ETFMetrics {
   dividend_growth_1y?: number;
   dividend_growth_3y?: number;
   dividend_growth_5y?: number;
+  return_1w?: number;
   return_1m?: number;
   return_3m?: number;
   return_ytd?: number;
@@ -269,6 +270,11 @@ export interface ETFMetrics {
   distribution_history: Array<{ month: string; amount: number }>;
   why_featured?: string;
   research_notes?: string;
+}
+
+export interface FeaturedETFs {
+  top_week: ETFSecurity[];
+  top_month: ETFSecurity[];
 }
 
 export interface ETFSecurity {

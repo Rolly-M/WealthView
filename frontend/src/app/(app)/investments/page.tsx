@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { BookmarkPlus, BookmarkCheck, Info, TrendingUp, TrendingDown, ExternalLink, Filter } from "lucide-react";
 import { etfApi } from "@/lib/api";
 import { cn, formatCurrency } from "@/lib/utils";
-import type { ETFSecurity } from "@/types";
+import type { ETFSecurity, FeaturedETFs } from "@/types";
 
 function pct(v?: number | null, decimals = 2) {
   if (v == null) return "—";
@@ -16,6 +16,7 @@ function fmt(v?: number | null, prefix = "") {
 }
 
 export default function InvestmentsPage() {
+  const [featured, setFeatured] = useState<FeaturedETFs>({ top_week: [], top_month: [] });
   const [etfs, setEtfs] = useState<ETFSecurity[]>([]);
   const [watchlist, setWatchlist] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -32,7 +33,7 @@ export default function InvestmentsPage() {
         etfApi.featured(),
         etfApi.watchlist(),
       ]);
-      if (etfRes.status === "fulfilled") setEtfs(etfRes.value.data);
+      if (etfRes.status === "fulfilled") setFeatured(etfRes.value.data);
       if (wlRes.status === "fulfilled") {
         setWatchlist(new Set(wlRes.value.data.map((item) => item.ticker)));
       }
@@ -134,11 +135,36 @@ export default function InvestmentsPage() {
         <strong>Research Disclaimer:</strong> ETF data shown is for educational and research purposes only. Yields, returns,
         and other metrics reflect historical data and do not guarantee future performance. WealthView Duo does not provide
         personalized investment advice. Always consult a licensed financial advisor before making investment decisions.
-        Data sourced from mock provider in demo mode. In production, connect a live market data provider.
+        Performance rankings refresh daily from real market data; other fundamentals (expense ratio, holdings) are only
+        available yet for a handful of well-known funds.
       </div>
 
-      {/* ETF cards */}
-      {loading ? (
+      {tab === "featured" ? (
+        loading ? (
+          <div className="space-y-4">
+            {Array.from({ length: 2 }).map((_, i) => <div key={i} className="shimmer h-64 rounded-2xl" />)}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <RankedList
+              title="🔥 Top 5 this week"
+              etfs={featured.top_week}
+              metricKey="return_1w"
+              watchlist={watchlist}
+              onToggleWatchlist={toggleWatchlist}
+              onSelect={setSelected}
+            />
+            <RankedList
+              title="📈 Top 10 this month"
+              etfs={featured.top_month}
+              metricKey="return_1m"
+              watchlist={watchlist}
+              onToggleWatchlist={toggleWatchlist}
+              onSelect={setSelected}
+            />
+          </div>
+        )
+      ) : loading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {Array.from({ length: 4 }).map((_, i) => <div key={i} className="shimmer h-48 rounded-2xl" />)}
         </div>
@@ -168,6 +194,70 @@ export default function InvestmentsPage() {
           onToggleWatchlist={() => toggleWatchlist(selected.ticker)}
           onClose={() => setSelected(null)}
         />
+      )}
+    </div>
+  );
+}
+
+function RankedList({
+  title, etfs, metricKey, watchlist, onToggleWatchlist, onSelect,
+}: {
+  title: string;
+  etfs: ETFSecurity[];
+  metricKey: "return_1w" | "return_1m";
+  watchlist: Set<string>;
+  onToggleWatchlist: (ticker: string) => void;
+  onSelect: (etf: ETFSecurity) => void;
+}) {
+  return (
+    <div className="card">
+      <h3 className="font-semibold text-sm text-gray-900 mb-3">{title}</h3>
+      {etfs.length === 0 ? (
+        <p className="text-sm text-gray-400 py-6 text-center">No ranked data yet — check back after the next daily refresh.</p>
+      ) : (
+        <div className="space-y-1">
+          {etfs.map((etf, i) => {
+            // These come straight from FMP as already-percentage values
+            // (e.g. 2.35 means +2.35%) — unlike the other fractional
+            // metrics elsewhere on this page, this must not be multiplied
+            // by 100 again.
+            const change = etf.latest_metrics?.[metricKey];
+            const price = etf.latest_metrics?.price;
+            return (
+              <div
+                key={etf.ticker}
+                onClick={() => onSelect(etf)}
+                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 cursor-pointer transition-colors"
+              >
+                <span className="text-xs font-semibold text-gray-400 w-5 flex-shrink-0">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-gray-900">{etf.ticker}</span>
+                    <span className="text-xs text-gray-400 truncate">{etf.name}</span>
+                  </div>
+                </div>
+                <span className="text-xs text-gray-500 tabular flex-shrink-0">
+                  {price != null ? formatCurrency(Number(price)) : "—"}
+                </span>
+                <span className={cn(
+                  "text-sm font-bold tabular w-16 text-right flex-shrink-0",
+                  change != null && change >= 0 ? "text-emerald-600" : "text-red-500"
+                )}>
+                  {change != null ? `${change >= 0 ? "+" : ""}${Number(change).toFixed(2)}%` : "—"}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onToggleWatchlist(etf.ticker); }}
+                  className={cn(
+                    "p-1.5 rounded-lg flex-shrink-0 transition-colors",
+                    watchlist.has(etf.ticker) ? "text-brand-600" : "text-gray-300 hover:text-brand-600"
+                  )}
+                >
+                  {watchlist.has(etf.ticker) ? <BookmarkCheck size={14} /> : <BookmarkPlus size={14} />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

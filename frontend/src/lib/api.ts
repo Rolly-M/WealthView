@@ -1,7 +1,7 @@
 import type {
   User, Household, Account, NetWorthSummary,
   Transaction, SpendingSummary, Budget, BudgetProgress,
-  Goal, Insight, ChatThread, ChatMessage, ETFSecurity,
+  Goal, Insight, ChatThread, ChatMessage, ETFSecurity, FeaturedETFs,
   TrackingSheet, TrackingSheetItem,
 } from "@/types";
 
@@ -129,7 +129,7 @@ export const chatApi = {
 
 export const etfApi = {
   screen: (params?: Params) => get<ETFSecurity[]>("/api/etf", params),
-  featured: () => get<ETFSecurity[]>("/api/etf/featured"),
+  featured: () => get<FeaturedETFs>("/api/etf/featured"),
   detail: (ticker: string) => get<ETFSecurity>(`/api/etf/${ticker}`),
   watchlist: () => get<ETFSecurity[]>("/api/etf/watchlist"),
   addToWatchlist: (ticker: string) => post<void>(`/api/etf/watchlist/${ticker}`),
