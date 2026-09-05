@@ -3,6 +3,12 @@ import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateHouseholdId } from "@/lib/supabase/household";
 
+// This handler syncs the linked account's full transaction history before
+// responding, which regularly exceeds Vercel's default 10s function
+// timeout for real accounts — the client would then just see a hung
+// "Importing…" request. 60s is Vercel's cap on the Hobby plan.
+export const maxDuration = 60;
+
 const plaid = new PlaidApi(
   new Configuration({
     basePath: PlaidEnvironments[process.env.PLAID_ENV ?? "sandbox"],
@@ -136,6 +142,15 @@ async function syncTransactions(
 
     cursor = data.next_cursor;
     hasMore = data.has_more;
+
+    // Persist progress after every page, not just at the end — if this
+    // function gets cut off by the serverless timeout partway through a
+    // long history, the next sync resumes from here instead of restarting
+    // the whole history from scratch.
+    await supabase
+      .from("accounts")
+      .update({ plaid_cursor: cursor })
+      .in("id", Object.values(plaidToUuid));
   }
 }
 

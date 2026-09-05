@@ -3,6 +3,11 @@ import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateHouseholdId } from "@/lib/supabase/household";
 
+// Re-syncs full transaction history for every linked account on each call —
+// can exceed Vercel's default 10s function timeout. 60s is the cap on the
+// Hobby plan.
+export const maxDuration = 60;
+
 const plaid = new PlaidApi(
   new Configuration({
     basePath: PlaidEnvironments[process.env.PLAID_ENV ?? "sandbox"],
@@ -26,7 +31,7 @@ export async function POST() {
   // Get all Plaid-connected accounts for this household
   const { data: accounts, error: accountsError } = await supabase
     .from("accounts")
-    .select("id, provider_account_id, provider_access_token, current_balance")
+    .select("id, provider_account_id, provider_access_token, current_balance, plaid_cursor")
     .eq("household_id", householdId)
     .eq("provider", "plaid")
     .eq("is_active", true);
@@ -58,19 +63,24 @@ export async function POST() {
         if (balanceError) console.error("Failed to update balance for", b.account_id, balanceError.message);
       }
 
-      // Build plaid account_id → our Supabase UUID map for this token
+      // Build plaid account_id → our Supabase UUID map, scoped to accounts
+      // under this specific access token (not the whole household) so the
+      // cursor persisted below doesn't get written to unrelated items.
       const { data: ourAccounts, error: ourAccountsError } = await supabase
         .from("accounts")
         .select("id, provider_account_id")
         .eq("household_id", householdId)
-        .eq("provider", "plaid");
+        .eq("provider", "plaid")
+        .eq("provider_access_token", token);
       if (ourAccountsError) throw ourAccountsError;
       const plaidToUuid = Object.fromEntries(
         (ourAccounts ?? []).map((a) => [a.provider_account_id, a.id])
       );
+      const accountUuids = Object.values(plaidToUuid);
 
-      // Sync new transactions
-      let cursor: string | undefined;
+      // Resume from wherever this item's last sync left off instead of
+      // re-walking its entire transaction history from scratch every time.
+      let cursor: string | undefined = acct.plaid_cursor ?? undefined;
       let hasMore = true;
 
       while (hasMore) {
@@ -116,6 +126,10 @@ export async function POST() {
 
         cursor = data.next_cursor;
         hasMore = data.has_more;
+
+        // Persist progress after every page so a serverless timeout partway
+        // through a long history resumes here next time instead of restarting.
+        await supabase.from("accounts").update({ plaid_cursor: cursor }).in("id", accountUuids);
       }
     }
 
