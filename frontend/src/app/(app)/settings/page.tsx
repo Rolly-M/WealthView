@@ -364,9 +364,14 @@ export default function SettingsPage() {
               <div className="space-y-2 mb-6">
                 {(household.members ?? []).map((m) => (
                   <div key={m.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
-                    <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold">
-                      {m.user.full_name.slice(0, 2).toUpperCase()}
-                    </div>
+                    {m.user.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- user-uploaded image from Supabase Storage, not an optimizable static asset
+                      <img src={m.user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        {m.user.full_name.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900">{m.user.full_name}</p>
                       <p className="text-xs text-gray-400">{m.user.email}</p>
@@ -469,21 +474,58 @@ export default function SettingsPage() {
 
       {/* ── Privacy ── */}
       {tab === "privacy" && (
-        <div className="card space-y-4">
-          <h2 className="font-semibold text-gray-900">Privacy Controls</h2>
-          <MfaSection required={!!user?.mfa_required} />
-          <div className="space-y-3 text-sm text-gray-600">
-            {[
-              { title: "Account visibility", body: "Control which accounts your partner can see. Toggle per-account in the Accounts tab." },
-              { title: "Read-only bank access", body: "WealthView Duo requests read-only access via Plaid. No payment or transfer capabilities." },
-              { title: "Data export", body: "You can export all your data at any time. Contact support to request a data export." },
-              { title: "Account deletion", body: "Deleting your account permanently removes all data and disconnects all bank accounts." },
-            ].map(({ title, body }) => (
-              <div key={title} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                <p className="font-medium text-gray-900 mb-1">{title}</p>
-                <p className="text-xs text-gray-500">{body}</p>
+        <div className="space-y-4">
+          <div className="card space-y-4">
+            <h2 className="font-semibold text-gray-900">Privacy Controls</h2>
+            <MfaSection required={!!user?.mfa_required} />
+            <ChangePasswordSection />
+
+            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+              <p className="font-medium text-gray-900 text-sm mb-1">Account visibility</p>
+              <p className="text-xs text-gray-500 mb-3">Control which accounts your partner can see.</p>
+              {accounts.length === 0 ? (
+                <p className="text-xs text-gray-400">No accounts linked yet.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {accounts.map((acc) => (
+                    <div key={acc.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white border border-gray-100">
+                      <span className="text-xs text-gray-700 truncate">{acc.name}</span>
+                      <button
+                        onClick={() => toggleShared(acc)}
+                        className={cn(
+                          "flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border transition-all flex-shrink-0",
+                          acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
+                        )}
+                      >
+                        {acc.is_shared ? <><Eye size={11} />Shared</> : <><EyeOff size={11} />Private</>}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+              <p className="font-medium text-gray-900 text-sm mb-1">Read-only bank access</p>
+              <p className="text-xs text-gray-500">WealthView Duo requests read-only access via Plaid. No payment or transfer capabilities.</p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-medium text-gray-900 text-sm mb-1">Data export</p>
+                  <p className="text-xs text-gray-500">Download all your accounts, transactions, budgets, and goals as a JSON file.</p>
+                </div>
+                <a href="/api/profile/export" className="btn-secondary text-xs py-2 flex-shrink-0">
+                  Export data
+                </a>
               </div>
-            ))}
+            </div>
+
+            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+              <p className="font-medium text-gray-900 text-sm mb-1">Account deletion</p>
+              <p className="text-xs text-gray-500">Deleting your account permanently removes all data and disconnects all bank accounts. Available in the Profile tab.</p>
+            </div>
           </div>
         </div>
       )}
@@ -656,6 +698,92 @@ function MfaSection({ required }: { required: boolean }) {
   );
 }
 
+// ─── Change password ────────────────────────────────────────────────────────
+function ChangePasswordSection() {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  function reset() {
+    setOpen(false);
+    setPassword("");
+    setConfirm("");
+    setError("");
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (password !== confirm) { setError("Passwords don't match."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+
+    setSaving(true);
+    setError("");
+    try {
+      const supabase = createClient();
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw new Error(updateError.message);
+      reset();
+      setDone(true);
+      setTimeout(() => setDone(false), 3000);
+    } catch (err: unknown) {
+      setError((err as Error)?.message ?? "Failed to change password");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-medium text-gray-900">Password</p>
+          <p className="text-xs text-gray-500 mt-0.5">Change the password used to sign in.</p>
+        </div>
+        {!open && (
+          <button onClick={() => setOpen(true)} className="btn-secondary text-xs py-2 flex-shrink-0">
+            Change password
+          </button>
+        )}
+      </div>
+
+      {done && <p className="text-xs text-emerald-700 mt-3">✓ Password updated.</p>}
+
+      {open && (
+        <form onSubmit={submit} className="space-y-3 mt-3 max-w-sm">
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <input
+            type="password"
+            placeholder="New password (min. 8 characters)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="input text-sm"
+            minLength={8}
+            required
+            autoFocus
+          />
+          <input
+            type="password"
+            placeholder="Confirm new password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className="input text-sm"
+            required
+          />
+          <div className="flex gap-2">
+            <button type="button" onClick={reset} className="btn-secondary text-xs py-2 flex-1">Cancel</button>
+            <button type="submit" disabled={saving} className="btn-primary text-xs py-2 flex-1">
+              {saving ? "Saving…" : "Save password"}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 // ─── Email verification status ─────────────────────────────────────────────────
 function EmailVerificationStatus({ user }: { user: User | null }) {
   const [sending, setSending] = useState(false);
@@ -738,10 +866,100 @@ function InviteLinkShare({ url, label }: { url: string; label?: string }) {
   );
 }
 
+const CURRENCIES = ["USD", "CAD", "EUR", "GBP", "AUD"];
+const LOCALES = [
+  { value: "en-US", label: "English (US)" },
+  { value: "en-CA", label: "English (Canada)" },
+  { value: "fr-CA", label: "Français (Canada)" },
+  { value: "en-GB", label: "English (UK)" },
+  { value: "fr-FR", label: "Français (France)" },
+];
+
+// ─── Avatar upload ──────────────────────────────────────────────────────────
+function AvatarUpload({ user, setUser }: { user: User | null; setUser: (u: User | null) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  const initials = user?.full_name?.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) ?? "?";
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !user) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please choose an image file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image must be under 5MB.");
+      return;
+    }
+
+    setError("");
+    setUploading(true);
+    try {
+      const supabase = createClient();
+      const ext = file.name.split(".").pop() ?? "jpg";
+      // Fixed filename (not timestamped) so re-uploading overwrites in place
+      // rather than accumulating orphaned files in the bucket forever.
+      const path = `${user.id}/avatar.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true, cacheControl: "3600" });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+      // Cache-bust so the new image shows immediately instead of the
+      // browser (or an <img> already on screen) serving the old cached one
+      // from the same URL.
+      const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      const res = await usersApi.update({ avatar_url: avatarUrl });
+      setUser(res.data);
+    } catch (err: unknown) {
+      setError((err as Error)?.message ?? "Failed to upload image");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-4">
+      <div className="relative w-16 h-16 flex-shrink-0">
+        {user?.avatar_url ? (
+          // eslint-disable-next-line @next/next/no-img-element -- user-uploaded image from Supabase Storage, not an optimizable static asset
+          <img src={user.avatar_url} alt="" className="w-16 h-16 rounded-full object-cover border border-gray-100" />
+        ) : (
+          <div className="w-16 h-16 rounded-full bg-brand-600 flex items-center justify-center text-white text-lg font-bold">
+            {initials}
+          </div>
+        )}
+        {uploading && (
+          <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
+            <RefreshCw size={16} className="text-white animate-spin" />
+          </div>
+        )}
+      </div>
+      <div>
+        <label className="btn-secondary text-xs py-2 cursor-pointer inline-flex">
+          Change photo
+          <input type="file" accept="image/*" className="hidden" onChange={handleFile} disabled={uploading} />
+        </label>
+        <p className="text-xs text-gray-400 mt-1.5">JPG or PNG, up to 5MB</p>
+        {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
 function ProfileTab({ user, setUser }: { user: User | null; setUser: (u: User | null) => void }) {
   const router = useRouter();
   const { clearAuth } = useAuthStore();
   const [name, setName] = useState(user?.full_name ?? "");
+  const [currency, setCurrency] = useState(user?.currency ?? "USD");
+  const [locale, setLocale] = useState(user?.locale ?? "en-US");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -753,7 +971,7 @@ function ProfileTab({ user, setUser }: { user: User | null; setUser: (u: User | 
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await usersApi.update({ full_name: name });
+      const res = await usersApi.update({ full_name: name, currency, locale });
       setUser(res.data);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -785,7 +1003,8 @@ function ProfileTab({ user, setUser }: { user: User | null; setUser: (u: User | 
     <div className="space-y-4">
       <div className="card">
         <h2 className="font-semibold text-gray-900 mb-4">Profile</h2>
-        <form onSubmit={save} className="space-y-4 max-w-sm">
+        <AvatarUpload user={user} setUser={setUser} />
+        <form onSubmit={save} className="space-y-4 max-w-sm mt-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Full name</label>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -794,6 +1013,20 @@ function ProfileTab({ user, setUser }: { user: User | null; setUser: (u: User | 
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
             <input className="input bg-gray-50 text-gray-500 cursor-not-allowed" value={user?.email ?? ""} disabled />
             <p className="text-xs text-gray-400 mt-1">Email cannot be changed here</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Currency</label>
+              <select className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Language & region</label>
+              <select className="input" value={locale} onChange={(e) => setLocale(e.target.value)}>
+                {LOCALES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </select>
+            </div>
           </div>
           <button type="submit" disabled={saving} className="btn-primary">
             {saved ? "✓ Saved" : saving ? "Saving…" : "Save changes"}

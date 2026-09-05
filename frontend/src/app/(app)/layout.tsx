@@ -116,9 +116,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <LogOut size={18} /> Sign out
           </button>
           <div className="flex items-center gap-3 px-3 py-3 mt-2 rounded-xl bg-gray-50 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]">
-            <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-              {initials}
-            </div>
+            {user?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element -- user-uploaded image from Supabase Storage, not an optimizable static asset
+              <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                {initials}
+              </div>
+            )}
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">{user?.full_name}</p>
               <p className="text-xs text-gray-400 truncate">{user?.email}</p>
