@@ -122,6 +122,34 @@ export interface SpendingSummary {
   transaction_count: number;
 }
 
+export interface TrackingSheetItem {
+  id: string;
+  sheet_id: string;
+  category: string;
+  description: string;
+  budgeted_amount: number;
+  actual_amount: number;
+  notes?: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrackingSheet {
+  id: string;
+  household_id: string;
+  month: number;
+  year: number;
+  name?: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  total_budgeted?: number;
+  total_actual?: number;
+  item_count?: number;
+  items?: TrackingSheetItem[];
+}
+
 export interface Budget {
   id: string;
   name: string;

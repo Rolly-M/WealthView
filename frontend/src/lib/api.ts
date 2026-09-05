@@ -2,6 +2,7 @@ import type {
   User, Household, Account, NetWorthSummary,
   Transaction, SpendingSummary, Budget, BudgetProgress,
   Goal, Insight, ChatThread, ChatMessage, ETFSecurity,
+  TrackingSheet, TrackingSheetItem,
 } from "@/types";
 
 type Params = Record<string, string | number | boolean | undefined | null>;
@@ -91,6 +92,18 @@ export const budgetsApi = {
   create: (data: object) => post<Budget>("/api/budgets", data),
   progress: (id: string) => get<BudgetProgress>(`/api/budgets/${id}/progress`),
   delete: (id: string) => del(`/api/budgets/${id}`),
+};
+
+export const trackingSheetsApi = {
+  list: () => get<TrackingSheet[]>("/api/tracking-sheets"),
+  create: (data: object) => post<TrackingSheet>("/api/tracking-sheets", data),
+  get: (id: string) => get<TrackingSheet>(`/api/tracking-sheets/${id}`),
+  update: (id: string, data: object) => patch<TrackingSheet>(`/api/tracking-sheets/${id}`, data),
+  delete: (id: string) => del(`/api/tracking-sheets/${id}`),
+  addItem: (id: string, data: object) => post<TrackingSheetItem>(`/api/tracking-sheets/${id}/items`, data),
+  updateItem: (id: string, itemId: string, data: object) =>
+    patch<TrackingSheetItem>(`/api/tracking-sheets/${id}/items/${itemId}`, data),
+  deleteItem: (id: string, itemId: string) => del(`/api/tracking-sheets/${id}/items/${itemId}`),
 };
 
 export const goalsApi = {
