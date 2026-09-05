@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { accountsApi, transactionsApi, insightsApi, goalsApi } from "@/lib/api";
-import { formatCurrency, formatSignedCurrency, getCategoryConfig, severityIcon, cn } from "@/lib/utils";
+import { formatCurrency, formatSignedCurrency, getCategoryConfig, severityIcon, cn, groupAccounts } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import type { Account, Insight, Goal, SpendingSummary } from "@/types";
 
@@ -361,21 +361,30 @@ export default function DashboardPage() {
             <p>No accounts linked yet</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {accounts.map((acc) => (
-              <div key={acc.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-brand-200 transition-colors">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-gray-500 truncate">{acc.name}</p>
-                  {!acc.is_shared && (
-                    <span className="badge bg-gray-100 text-gray-500 text-[10px]">Private</span>
-                  )}
+          <div className="space-y-4">
+            {groupAccounts(accounts, null).map(([, banks]) =>
+              banks.map(([bankLabel, bankAccounts]) => (
+                <div key={bankLabel}>
+                  <p className="text-xs font-medium text-gray-500 mb-2">{bankLabel}</p>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {bankAccounts.map((acc) => (
+                      <div key={acc.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-brand-200 transition-colors">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-medium text-gray-500 truncate">{acc.name}</p>
+                          {!acc.is_shared && (
+                            <span className="badge bg-gray-100 text-gray-500 text-[10px]">Private</span>
+                          )}
+                        </div>
+                        <p className="text-base font-bold text-gray-900 tabular">
+                          {formatCurrency(Math.abs(Number(acc.current_balance)))}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5 capitalize">{acc.type}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-base font-bold text-gray-900 tabular">
-                  {formatCurrency(Math.abs(Number(acc.current_balance)))}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5 capitalize">{acc.type}</p>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
       </div>

@@ -1,8 +1,36 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { Account, Household } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+export const ALL_OWNERS_KEY = "__all__";
+
+// Groups accounts by owner (partner) then by institution, so account lists
+// read as "who's accounts, from which bank" instead of one flat list.
+// Shared by Settings (full management, owner grouping matters) and the
+// Dashboard's compact overview (pass household as null there to skip
+// straight to bank-only grouping). The owner level is skipped entirely for
+// a solo household — nothing useful to say there.
+export function groupAccounts(accounts: Account[], household: Household | null): [string, [string, Account[]][]][] {
+  const ownerNames: Record<string, string> = Object.fromEntries(
+    (household?.members ?? []).map((m) => [m.user.id, m.user.full_name])
+  );
+  const multiMember = (household?.members?.length ?? 0) > 1;
+
+  const groups = new Map<string, Map<string, Account[]>>();
+  for (const acc of accounts) {
+    const ownerKey = multiMember ? (ownerNames[acc.owner_id] ?? "Unknown") : ALL_OWNERS_KEY;
+    const bankKey = acc.institution_name ?? (acc.provider === "manual" ? "Manual accounts" : "Other");
+    if (!groups.has(ownerKey)) groups.set(ownerKey, new Map());
+    const banks = groups.get(ownerKey)!;
+    if (!banks.has(bankKey)) banks.set(bankKey, []);
+    banks.get(bankKey)!.push(acc);
+  }
+
+  return Array.from(groups.entries()).map(([owner, banks]) => [owner, Array.from(banks.entries())]);
 }
 
 export function formatCurrency(

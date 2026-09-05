@@ -1,5 +1,34 @@
-import type { PlaidApi } from "plaid";
+import { CountryCode, type PlaidApi } from "plaid";
 import type { createClient } from "@/lib/supabase/server";
+
+// Accounts linked before institution_name started being captured from
+// Plaid Link's onSuccess metadata (client-side, free) have it null, so they
+// fall into the settings page's "Other" bucket instead of grouping under
+// their real bank. Looks it up via the Item → institution_id → institution
+// name chain, which does cost two Plaid API calls — callers should only
+// invoke this for accounts actually missing the name, not on every sync.
+export async function backfillInstitutionName(
+  supabase: ReturnType<typeof createClient>,
+  plaid: PlaidApi,
+  accessToken: string,
+  householdId: string
+): Promise<void> {
+  const { data: itemData } = await plaid.itemGet({ access_token: accessToken });
+  const institutionId = itemData.item.institution_id;
+  if (!institutionId) return;
+
+  const { data: instData } = await plaid.institutionsGetById({
+    institution_id: institutionId,
+    country_codes: [CountryCode.Ca, CountryCode.Us],
+  });
+
+  await supabase
+    .from("accounts")
+    .update({ institution_name: instData.institution.name })
+    .eq("household_id", householdId)
+    .eq("provider_access_token", accessToken)
+    .is("institution_name", null);
+}
 
 // Keyed on Plaid's `personal_finance_category.detailed` value (their finest-
 // grained taxonomy — see https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv)

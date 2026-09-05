@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateHouseholdId } from "@/lib/supabase/household";
-import { syncPlaidTransactions } from "@/lib/plaid";
+import { syncPlaidTransactions, backfillInstitutionName } from "@/lib/plaid";
 
 // Re-syncs full transaction history for every linked account on each call —
 // can exceed Vercel's default 10s function timeout. 60s is the cap on the
@@ -32,7 +32,7 @@ export async function POST() {
   // Get all Plaid-connected accounts for this household
   const { data: accounts, error: accountsError } = await supabase
     .from("accounts")
-    .select("id, provider_account_id, provider_access_token, current_balance, plaid_cursor")
+    .select("id, provider_account_id, provider_access_token, current_balance, plaid_cursor, institution_name")
     .eq("household_id", householdId)
     .eq("provider", "plaid")
     .eq("is_active", true);
@@ -49,6 +49,12 @@ export async function POST() {
       const token = acct.provider_access_token;
       if (!token || seen.has(token)) continue;
       seen.add(token);
+
+      if (!acct.institution_name) {
+        await backfillInstitutionName(supabase, plaid, token, householdId).catch((err) =>
+          console.error("Failed to backfill institution name:", err)
+        );
+      }
 
       // Refresh balances
       const { data: balData } = await plaid.accountsGet({ access_token: token });

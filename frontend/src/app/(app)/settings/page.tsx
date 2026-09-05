@@ -5,35 +5,10 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building2, AlertTriangle, Copy, Check, Mail, MessageCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { accountsApi, householdsApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
-import { formatCurrency, formatSignedCurrency, cn } from "@/lib/utils";
+import { formatCurrency, formatSignedCurrency, cn, groupAccounts, ALL_OWNERS_KEY } from "@/lib/utils";
 import type { Account, Household, User } from "@/types";
 import { usePlaidLink } from "react-plaid-link";
 import { createClient } from "@/lib/supabase/client";
-
-const ALL_OWNERS_KEY = "__all__";
-
-// Groups accounts by owner (partner) then by institution, so a couple's
-// Settings page reads as "who's accounts, from which bank" instead of one
-// flat list. The owner level is skipped entirely for a solo household —
-// nothing useful to say there.
-function groupAccounts(accounts: Account[], household: Household | null): [string, [string, Account[]][]][] {
-  const ownerNames: Record<string, string> = Object.fromEntries(
-    (household?.members ?? []).map((m) => [m.user.id, m.user.full_name])
-  );
-  const multiMember = (household?.members?.length ?? 0) > 1;
-
-  const groups = new Map<string, Map<string, Account[]>>();
-  for (const acc of accounts) {
-    const ownerKey = multiMember ? (ownerNames[acc.owner_id] ?? "Unknown") : ALL_OWNERS_KEY;
-    const bankKey = acc.institution_name ?? (acc.provider === "manual" ? "Manual accounts" : "Other");
-    if (!groups.has(ownerKey)) groups.set(ownerKey, new Map());
-    const banks = groups.get(ownerKey)!;
-    if (!banks.has(bankKey)) banks.set(bankKey, []);
-    banks.get(bankKey)!.push(acc);
-  }
-
-  return Array.from(groups.entries()).map(([owner, banks]) => [owner, Array.from(banks.entries())]);
-}
 
 // ─── Plaid Link button ────────────────────────────────────────────────────────
 // Inner component — only mounted once we have a valid token
