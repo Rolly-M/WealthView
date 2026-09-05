@@ -41,6 +41,7 @@ export interface Invitation {
   email: string;
   role: string;
   status: "pending" | "accepted" | "declined" | "expired";
+  token: string;
   expires_at: string;
   created_at: string;
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { randomBytes } from "crypto";
-import { sendEmail, inviteEmailHtml } from "@/lib/email";
 
 export async function POST(req: Request) {
   const supabase = createClient();
@@ -39,25 +38,12 @@ export async function POST(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+  // The invite is a shareable link the household owner sends themselves
+  // (email, text, WhatsApp, whatever) rather than an email this endpoint
+  // sends on their behalf — Resend's sandbox sender can't reach arbitrary
+  // recipients without a verified domain, so an auto-sent email isn't
+  // reliable enough to depend on here.
   const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`;
 
-  const [householdRes, profileRes] = await Promise.all([
-    supabase.from("households").select("name").eq("id", membership.household_id).single(),
-    supabase.from("profiles").select("full_name").eq("id", user.id).single(),
-  ]);
-
-  const { sent, error: emailError } = await sendEmail({
-    to: body.email,
-    subject: `${profileRes.data?.full_name ?? "Your partner"} invited you to WealthView Duo`,
-    html: inviteEmailHtml({
-      inviterName: profileRes.data?.full_name ?? "Your partner",
-      householdName: householdRes.data?.name ?? "their household",
-      inviteUrl,
-    }),
-  });
-
-  return NextResponse.json(
-    { ...data, invite_url: inviteUrl, email_sent: sent, email_error: emailError },
-    { status: 201 }
-  );
+  return NextResponse.json({ ...data, invite_url: inviteUrl }, { status: 201 });
 }

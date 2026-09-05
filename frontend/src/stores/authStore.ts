@@ -10,7 +10,7 @@ interface AuthState {
   loading: boolean;
   initialize: () => Promise<() => void>;
   signIn: (email: string, password: string) => Promise<{ needsMfa: boolean }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ needsConfirmation: boolean }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ needsConfirmation: boolean; userId: string }>;
   clearAuth: () => Promise<void>;
   setUser: (user: User | null) => void;
 }
@@ -85,8 +85,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       e.response = { data: { detail: error.message } };
       throw e;
     }
-    // Returns true when email confirmation is required (no session yet)
-    return { needsConfirmation: !data.session };
+    // needsConfirmation is true when email confirmation is required (no session yet)
+    return { needsConfirmation: !data.session, userId: data.user!.id };
   },
 
   clearAuth: async () => {

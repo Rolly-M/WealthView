@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     title: "WealthView Duo",
   },
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? "https://wealthviewduo.vercel.app"
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://wealth-view-five.vercel.app"
   ),
 };
 

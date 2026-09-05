@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building2, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building2, AlertTriangle, Copy, Check, Mail, MessageCircle } from "lucide-react";
 import { accountsApi, householdsApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -141,6 +141,11 @@ export default function SettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
   const [inviteStatus, setInviteStatus] = useState("");
+  const [inviteUrl, setInviteUrl] = useState("");
+  const [expandedInviteId, setExpandedInviteId] = useState<string | null>(null);
+  const [appOrigin, setAppOrigin] = useState("");
+
+  useEffect(() => { setAppOrigin(window.location.origin); }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -173,13 +178,10 @@ export default function SettingsPage() {
     e.preventDefault();
     setInviting(true);
     setInviteStatus("");
+    setInviteUrl("");
     try {
       const { data } = await householdsApi.invite({ email: inviteEmail, role: "editor" });
-      setInviteStatus(
-        data.email_sent
-          ? `Invitation sent to ${inviteEmail}`
-          : `Invite created, but the email couldn't be sent (${data.email_error ?? "unknown error"}). Share this link directly: ${data.invite_url}`
-      );
+      setInviteUrl(data.invite_url);
       setInviteEmail("");
       load();
     } catch (err: unknown) {
@@ -332,30 +334,41 @@ export default function SettingsPage() {
               <div className="border-t border-gray-100 pt-4">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Invite your partner</h3>
                 {inviteStatus && (
-                  <div className={cn(
-                    "p-3 rounded-xl text-xs mb-3",
-                    inviteStatus.includes("Failed") ? "bg-red-50 text-red-700 border border-red-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                  )}>
+                  <div className="p-3 rounded-xl text-xs mb-3 bg-red-50 text-red-700 border border-red-200">
                     {inviteStatus}
                   </div>
                 )}
-                <form onSubmit={sendInvite} className="flex gap-2">
-                  <input
-                    type="email"
-                    placeholder="partner@example.com"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    className="input flex-1"
-                    required
-                  />
-                  <button type="submit" disabled={inviting} className="btn-primary flex-shrink-0">
-                    <UserPlus size={15} />
-                    {inviting ? "Sending…" : "Invite"}
-                  </button>
-                </form>
-                <p className="text-xs text-gray-400 mt-2">
-                  They&apos;ll get a link valid for 7 days to join your household with their own login.
-                </p>
+                {inviteUrl ? (
+                  <div>
+                    <InviteLinkShare url={inviteUrl} label="Invite created — share this link however you like:" />
+                    <button
+                      onClick={() => setInviteUrl("")}
+                      className="text-xs text-brand-600 hover:underline mt-2"
+                    >
+                      Create another invite
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <form onSubmit={sendInvite} className="flex gap-2">
+                      <input
+                        type="email"
+                        placeholder="partner@example.com"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        className="input flex-1"
+                        required
+                      />
+                      <button type="submit" disabled={inviting} className="btn-primary flex-shrink-0">
+                        <UserPlus size={15} />
+                        {inviting ? "Creating…" : "Invite"}
+                      </button>
+                    </form>
+                    <p className="text-xs text-gray-400 mt-2">
+                      You&apos;ll get a link valid for 7 days to share with them however you like — email, text, or WhatsApp.
+                    </p>
+                  </>
+                )}
               </div>
 
               {/* Pending */}
@@ -364,17 +377,30 @@ export default function SettingsPage() {
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">Pending invitations</h3>
                   <div className="space-y-1.5">
                     {household.pending_invitations.map((inv) => (
-                      <div key={inv.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-amber-50 border border-amber-100">
-                        <span className="text-xs text-amber-800 truncate">{inv.email}</span>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="badge bg-amber-100 text-amber-700 text-[10px]">Pending</span>
-                          <button
-                            onClick={() => cancelInvite(inv.id)}
-                            className="text-xs text-red-600 hover:underline"
-                          >
-                            Cancel
-                          </button>
+                      <div key={inv.id} className="rounded-lg bg-amber-50 border border-amber-100 overflow-hidden">
+                        <div className="flex items-center justify-between gap-2 p-2">
+                          <span className="text-xs text-amber-800 truncate">{inv.email}</span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="badge bg-amber-100 text-amber-700 text-[10px]">Pending</span>
+                            <button
+                              onClick={() => setExpandedInviteId(expandedInviteId === inv.id ? null : inv.id)}
+                              className="text-xs text-brand-600 hover:underline"
+                            >
+                              {expandedInviteId === inv.id ? "Hide link" : "Share link"}
+                            </button>
+                            <button
+                              onClick={() => cancelInvite(inv.id)}
+                              className="text-xs text-red-600 hover:underline"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
+                        {expandedInviteId === inv.id && appOrigin && (
+                          <div className="p-2 pt-0">
+                            <InviteLinkShare url={`${appOrigin}/invite/${inv.token}`} />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -620,6 +646,45 @@ function EmailVerificationStatus({ user }: { user: User | null }) {
         </button>
       </div>
       {status && <p className="text-xs text-amber-700 mt-1.5">{status}</p>}
+    </div>
+  );
+}
+
+// ─── Invite link share ──────────────────────────────────────────────────────
+function InviteLinkShare({ url, label }: { url: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  const message = "Join our household on WealthView Duo so we can track our finances together:";
+  const mailtoHref = `mailto:?subject=${encodeURIComponent("Join me on WealthView Duo")}&body=${encodeURIComponent(`${message}\n\n${url}`)}`;
+  const smsHref = `sms:?body=${encodeURIComponent(`${message} ${url}`)}`;
+  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(`${message} ${url}`)}`;
+
+  return (
+    <div className="p-3 rounded-xl bg-brand-50 border border-brand-100">
+      {label && <p className="text-xs text-brand-800 mb-2">{label}</p>}
+      <div className="flex items-center gap-2 mb-3">
+        <input readOnly value={url} onFocus={(e) => e.target.select()} className="input flex-1 text-xs" />
+        <button type="button" onClick={copy} className="btn-secondary flex-shrink-0 !px-3" title="Copy link">
+          {copied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />}
+        </button>
+      </div>
+      <div className="flex items-center gap-2">
+        <a href={mailtoHref} className="btn-secondary text-xs flex items-center gap-1.5 !px-3">
+          <Mail size={13} /> Email
+        </a>
+        <a href={smsHref} className="btn-secondary text-xs flex items-center gap-1.5 !px-3">
+          <MessageCircle size={13} /> Text
+        </a>
+        <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs flex items-center gap-1.5 !px-3">
+          WhatsApp
+        </a>
+      </div>
     </div>
   );
 }

@@ -30,7 +30,16 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
     try {
-      const { needsConfirmation: confirm } = await signUp(form.email, form.password, form.full_name);
+      const { needsConfirmation: confirm, userId } = await signUp(form.email, form.password, form.full_name);
+
+      // Fire-and-forget our own branded verification email either way — it
+      // works even when Supabase's own "Confirm email" is on and withheld
+      // the session, since we pass the id signUp() just gave us.
+      fetch("/api/auth/send-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      }).catch(() => {});
 
       if (confirm) {
         // Email confirmation required — show check-email screen
@@ -44,9 +53,6 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: `${form.full_name}'s Household` }),
       });
-      // Fire-and-forget our own branded verification email — don't block
-      // getting into the app on it.
-      fetch("/api/auth/send-verification", { method: "POST" }).catch(() => {});
       // MFA is mandatory on password-created accounts — flag it, then send
       // straight to enrollment (middleware would redirect there anyway,
       // this just skips the extra hop through /dashboard).

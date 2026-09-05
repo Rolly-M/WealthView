@@ -43,6 +43,15 @@ function InviteForm({ token }: { token: string }) {
       });
       if (signUpError) throw new Error(signUpError.message);
 
+      // Fire-and-forget our own branded verification email either way — it
+      // works even when Supabase's own "Confirm email" is on and withheld
+      // the session, since we pass the id signUp() just gave us.
+      fetch("/api/auth/send-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: signUpData.user?.id }),
+      }).catch(() => {});
+
       if (!signUpData.session) {
         // Email confirmation required — no session yet, so the invite can't
         // be accepted until the user confirms and comes back to this link.
@@ -57,9 +66,6 @@ function InviteForm({ token }: { token: string }) {
         throw new Error(body.error ?? "Failed to join household");
       }
 
-      // Fire-and-forget our own branded verification email — don't block
-      // getting into the household on it.
-      fetch("/api/auth/send-verification", { method: "POST" }).catch(() => {});
       // MFA is mandatory on password-created accounts — flag it, then send
       // straight to enrollment.
       await fetch("/api/auth/require-mfa", { method: "POST" });
