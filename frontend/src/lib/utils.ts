@@ -18,6 +18,17 @@ export function formatCurrency(
   }).format(Math.abs(amount));
 }
 
+// formatCurrency always shows a magnitude (callers show sign/direction via
+// color, a +/- badge, or context). Net worth has no such other indicator,
+// so it needs the sign preserved directly in the string, e.g. "-$500.00".
+export function formatSignedCurrency(
+  amount: number,
+  currency = "USD",
+  locale = "en-US"
+): string {
+  return `${amount < 0 ? "-" : ""}${formatCurrency(amount, currency, locale)}`;
+}
+
 export function formatPercent(value: number, decimals = 1): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(decimals)}%`;
 }

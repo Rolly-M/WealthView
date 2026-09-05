@@ -69,6 +69,7 @@ export interface Account {
   include_in_net_worth: boolean;
   last_synced_at?: string;
   institution?: Institution;
+  institution_name?: string;
   owner_id: string;
   provider: string;
 }

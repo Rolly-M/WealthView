@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { accountsApi, transactionsApi, insightsApi, goalsApi } from "@/lib/api";
-import { formatCurrency, getCategoryConfig, severityIcon, cn } from "@/lib/utils";
+import { formatCurrency, formatSignedCurrency, getCategoryConfig, severityIcon, cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import type { Account, Insight, Goal, SpendingSummary } from "@/types";
 
@@ -38,7 +38,7 @@ function MetricCard({
           <Icon size={18} />
         </div>
       </div>
-      <p className="metric-value">{value}</p>
+      <p className={cn("metric-value", color === "red" && "text-red-600")}>{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
       {trend !== undefined && (
         <div className={cn("flex items-center gap-1 text-xs font-medium mt-2", trend >= 0 ? "text-emerald-600" : "text-red-500")}>
@@ -141,10 +141,10 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard
             label="Net Worth"
-            value={formatCurrency(netWorth?.net_worth ?? 0)}
-            sub={`${formatCurrency(netWorth?.total_assets ?? 0)} assets`}
+            value={formatSignedCurrency(netWorth?.net_worth ?? 0)}
+            sub={`${formatCurrency(netWorth?.total_assets ?? 0)} assets, ${formatCurrency(netWorth?.total_liabilities ?? 0)} liabilities`}
             icon={TrendingUp}
-            color="brand"
+            color={(netWorth?.net_worth ?? 0) < 0 ? "red" : "brand"}
           />
           <MetricCard
             label="Cash Available"

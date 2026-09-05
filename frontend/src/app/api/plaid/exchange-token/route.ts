@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateHouseholdId } from "@/lib/supabase/household";
+import { syncPlaidTransactions } from "@/lib/plaid";
 
 // This handler syncs the linked account's full transaction history before
 // responding, which regularly exceeds Vercel's default 10s function
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { public_token } = await req.json();
+  const { public_token, institution_name } = await req.json();
 
   const householdId = await getOrCreateHouseholdId(supabase, user.id);
   if (!householdId) return NextResponse.json({ error: "No household" }, { status: 404 });
@@ -73,6 +74,7 @@ export async function POST(req: Request) {
         name: acct.name,
         official_name: acct.official_name ?? null,
         mask: acct.mask ?? null,
+        institution_name: institution_name ?? null,
         type: accountTypeMap[acct.type] ?? "other",
         subtype: subtypeMap[acct.subtype ?? ""] ?? acct.subtype ?? null,
         currency: acct.balances.iso_currency_code ?? "USD",
@@ -108,7 +110,7 @@ export async function POST(req: Request) {
     }
 
     // Sync initial transactions using the correct UUID mapping
-    await syncTransactions(supabase, plaid, accessToken, householdId, plaidToUuid);
+    await syncPlaidTransactions(supabase, plaid, accessToken, householdId, plaidToUuid);
 
     return NextResponse.json({ accounts: Object.keys(plaidToUuid).length, item_id: itemId });
   } catch (err: unknown) {
@@ -118,79 +120,4 @@ export async function POST(req: Request) {
       : (err as Error)?.message ?? "Plaid API error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
-
-async function syncTransactions(
-  supabase: ReturnType<typeof import("@/lib/supabase/server").createClient>,
-  plaid: PlaidApi,
-  accessToken: string,
-  householdId: string,
-  plaidToUuid: Record<string, string>
-) {
-  let cursor: string | undefined;
-  let hasMore = true;
-
-  while (hasMore) {
-    const { data } = await plaid.transactionsSync({
-      access_token: accessToken,
-      cursor,
-      options: { include_personal_finance_category: true },
-    });
-
-    const toInsert = data.added
-      .filter((t) => plaidToUuid[t.account_id]) // skip if no UUID mapping
-      .map((t) => ({
-        account_id: plaidToUuid[t.account_id],  // ← correct Supabase UUID
-        household_id: householdId,
-        provider_transaction_id: t.transaction_id,
-        amount: Math.abs(t.amount),
-        currency: t.iso_currency_code ?? "USD",
-        date: t.date,
-        merchant_name: t.merchant_name ?? t.name,
-        description: t.name,
-        category: mapCategory(t.personal_finance_category?.primary ?? t.category?.[0] ?? ""),
-        is_income: t.amount < 0,
-        is_pending: t.pending,
-        tags: [],
-      }));
-
-    if (toInsert.length > 0) {
-      const { error } = await supabase
-        .from("transactions")
-        .upsert(toInsert, { onConflict: "provider_transaction_id" });
-      if (error) throw error;
-    }
-
-    cursor = data.next_cursor;
-    hasMore = data.has_more;
-
-    // Persist progress after every page, not just at the end — if this
-    // function gets cut off by the serverless timeout partway through a
-    // long history, the next sync resumes from here instead of restarting
-    // the whole history from scratch.
-    await supabase
-      .from("accounts")
-      .update({ plaid_cursor: cursor })
-      .in("id", Object.values(plaidToUuid));
-  }
-}
-
-function mapCategory(plaidCategory: string): string {
-  const c = plaidCategory.toLowerCase();
-  if (c.includes("food") || c.includes("grocer")) return "groceries";
-  if (c.includes("restaurant") || c.includes("dining") || c.includes("fast_food")) return "dining";
-  if (c.includes("travel") || c.includes("airline") || c.includes("hotel")) return "travel";
-  if (c.includes("transport") || c.includes("gas") || c.includes("taxi") || c.includes("auto")) return "transportation";
-  if (c.includes("utilities") || c.includes("electric") || c.includes("water") || c.includes("internet")) return "utilities";
-  if (c.includes("income") || c.includes("payroll") || c.includes("deposit")) return "income";
-  if (c.includes("transfer") || c.includes("payment")) return "transfer";
-  if (c.includes("subscription") || c.includes("streaming")) return "subscription";
-  if (c.includes("medical") || c.includes("health") || c.includes("pharmacy")) return "health";
-  if (c.includes("education") || c.includes("school")) return "education";
-  if (c.includes("entertainment") || c.includes("recreation")) return "entertainment";
-  if (c.includes("shopping") || c.includes("merchandise") || c.includes("clothing")) return "shopping";
-  if (c.includes("rent") || c.includes("mortgage") || c.includes("housing")) return "housing";
-  if (c.includes("insurance")) return "insurance";
-  if (c.includes("loan") || c.includes("credit")) return "debt_payment";
-  return "miscellaneous";
 }

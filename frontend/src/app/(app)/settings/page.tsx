@@ -10,6 +10,31 @@ import type { Account, Household, User } from "@/types";
 import { usePlaidLink } from "react-plaid-link";
 import { createClient } from "@/lib/supabase/client";
 
+const ALL_OWNERS_KEY = "__all__";
+
+// Groups accounts by owner (partner) then by institution, so a couple's
+// Settings page reads as "who's accounts, from which bank" instead of one
+// flat list. The owner level is skipped entirely for a solo household —
+// nothing useful to say there.
+function groupAccounts(accounts: Account[], household: Household | null): [string, [string, Account[]][]][] {
+  const ownerNames: Record<string, string> = Object.fromEntries(
+    (household?.members ?? []).map((m) => [m.user.id, m.user.full_name])
+  );
+  const multiMember = (household?.members?.length ?? 0) > 1;
+
+  const groups = new Map<string, Map<string, Account[]>>();
+  for (const acc of accounts) {
+    const ownerKey = multiMember ? (ownerNames[acc.owner_id] ?? "Unknown") : ALL_OWNERS_KEY;
+    const bankKey = acc.institution_name ?? (acc.provider === "manual" ? "Manual accounts" : "Other");
+    if (!groups.has(ownerKey)) groups.set(ownerKey, new Map());
+    const banks = groups.get(ownerKey)!;
+    if (!banks.has(bankKey)) banks.set(bankKey, []);
+    banks.get(bankKey)!.push(acc);
+  }
+
+  return Array.from(groups.entries()).map(([owner, banks]) => [owner, Array.from(banks.entries())]);
+}
+
 // ─── Plaid Link button ────────────────────────────────────────────────────────
 // Inner component — only mounted once we have a valid token
 function PlaidLinkInner({
@@ -22,14 +47,14 @@ function PlaidLinkInner({
 
   const { open, ready } = usePlaidLink({
     token,
-    onSuccess: async (publicToken) => {
+    onSuccess: async (publicToken, metadata) => {
       setConnecting(true);
       setLinkError(null);
       try {
         const res = await fetch("/api/plaid/exchange-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ public_token: publicToken }),
+          body: JSON.stringify({ public_token: publicToken, institution_name: metadata.institution?.name ?? null }),
         });
         if (!res.ok) {
           const d = await res.json().catch(() => ({}));
@@ -253,40 +278,58 @@ export default function SettingsPage() {
                 <PlaidLinkButton onSuccess={load} variant="large" />
               </div>
             ) : (
-              <div className="space-y-2">
-                {accounts.map((acc) => (
-                  <div key={acc.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-sm text-gray-900">{acc.name}</p>
-                        <span className={cn(
-                          "badge text-[10px]",
-                          acc.type === "checking" ? "bg-blue-100 text-blue-700" :
-                          acc.type === "savings" ? "bg-emerald-100 text-emerald-700" :
-                          acc.type === "credit" ? "bg-amber-100 text-amber-700" :
-                          "bg-gray-100 text-gray-600"
-                        )}>{acc.type}</span>
-                        {acc.provider === "plaid" && (
-                          <span className="badge bg-teal-50 text-teal-700 text-[10px]">Live</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(Math.abs(acc.current_balance))}</p>
+              <div className="space-y-5">
+                {groupAccounts(accounts, household).map(([ownerLabel, banks]) => (
+                  <div key={ownerLabel}>
+                    {ownerLabel !== ALL_OWNERS_KEY && (
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{ownerLabel}</h3>
+                    )}
+                    <div className="space-y-4">
+                      {banks.map(([bankLabel, bankAccounts]) => (
+                        <div key={bankLabel}>
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
+                            <Building2 size={12} />{bankLabel}
+                          </div>
+                          <div className="space-y-2">
+                            {bankAccounts.map((acc) => (
+                              <div key={acc.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-sm text-gray-900">{acc.name}</p>
+                                    <span className={cn(
+                                      "badge text-[10px]",
+                                      acc.type === "checking" ? "bg-blue-100 text-blue-700" :
+                                      acc.type === "savings" ? "bg-emerald-100 text-emerald-700" :
+                                      acc.type === "credit" ? "bg-amber-100 text-amber-700" :
+                                      "bg-gray-100 text-gray-600"
+                                    )}>{acc.type}</span>
+                                    {acc.provider === "plaid" && (
+                                      <span className="badge bg-teal-50 text-teal-700 text-[10px]">Live</span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(Math.abs(acc.current_balance))}</p>
+                                </div>
+                                <button
+                                  onClick={() => toggleShared(acc)}
+                                  className={cn(
+                                    "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
+                                    acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
+                                  )}
+                                >
+                                  {acc.is_shared ? <><Eye size={12} />Shared</> : <><EyeOff size={12} />Private</>}
+                                </button>
+                                <button
+                                  onClick={() => disconnect(acc)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <button
-                      onClick={() => toggleShared(acc)}
-                      className={cn(
-                        "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
-                        acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
-                      )}
-                    >
-                      {acc.is_shared ? <><Eye size={12} />Shared</> : <><EyeOff size={12} />Private</>}
-                    </button>
-                    <button
-                      onClick={() => disconnect(acc)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
                   </div>
                 ))}
               </div>
