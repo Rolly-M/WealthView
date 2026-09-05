@@ -41,5 +41,14 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     .eq("household_id", householdId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  // Every transaction-reading endpoint (list, summary, budgets, insights,
+  // chat context) already filters on is_hidden — piggyback on that instead
+  // of teaching each of them to also check the owning account's is_active,
+  // so a disconnected account's history stops appearing everywhere at once
+  // instead of lingering as apparent duplicates next to whatever account
+  // absorbed it.
+  await supabase.from("transactions").update({ is_hidden: true }).eq("account_id", params.id);
+
   return new NextResponse(null, { status: 204 });
 }

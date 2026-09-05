@@ -1,23 +1,163 @@
 import type { PlaidApi } from "plaid";
 import type { createClient } from "@/lib/supabase/server";
 
-export function mapCategory(plaidCategory: string): string {
-  const c = plaidCategory.toLowerCase();
-  if (c.includes("food") || c.includes("grocer")) return "groceries";
-  if (c.includes("restaurant") || c.includes("dining") || c.includes("fast_food")) return "dining";
-  if (c.includes("travel") || c.includes("airline") || c.includes("hotel")) return "travel";
-  if (c.includes("transport") || c.includes("gas") || c.includes("taxi") || c.includes("auto")) return "transportation";
-  if (c.includes("utilities") || c.includes("electric") || c.includes("water") || c.includes("internet")) return "utilities";
-  if (c.includes("income") || c.includes("payroll") || c.includes("deposit")) return "income";
-  if (c.includes("transfer") || c.includes("payment")) return "transfer";
+// Keyed on Plaid's `personal_finance_category.detailed` value (their finest-
+// grained taxonomy — see https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv)
+// mapped onto this app's own category set (lib/utils.ts CATEGORY_CONFIG).
+// `primary` alone (e.g. "FOOD_AND_DRINK") can't tell fast food from
+// groceries from a sit-down restaurant — they all share the same primary —
+// which was the previous version's actual bug, not just the substring
+// check order.
+const DETAILED_CATEGORY_MAP: Record<string, string> = {
+  FOOD_AND_DRINK_GROCERIES: "groceries",
+  FOOD_AND_DRINK_FAST_FOOD: "dining",
+  FOOD_AND_DRINK_RESTAURANT: "dining",
+  FOOD_AND_DRINK_COFFEE: "dining",
+  FOOD_AND_DRINK_VENDING_MACHINES: "dining",
+  FOOD_AND_DRINK_OTHER_FOOD_AND_DRINK: "dining",
+
+  TRANSPORTATION_GAS: "transportation",
+  TRANSPORTATION_PARKING: "transportation",
+  TRANSPORTATION_PUBLIC_TRANSIT: "transportation",
+  TRANSPORTATION_TAXIS_AND_RIDE_SHARES: "transportation",
+  TRANSPORTATION_TOLLS: "transportation",
+  TRANSPORTATION_BIKES_AND_SCOOTERS: "transportation",
+  TRANSPORTATION_OTHER_TRANSPORTATION: "transportation",
+
+  TRAVEL_FLIGHTS: "travel",
+  TRAVEL_LODGING: "travel",
+  TRAVEL_RENTAL_CARS: "travel",
+  TRAVEL_PARKING: "travel",
+  TRAVEL_OTHER_TRAVEL: "travel",
+
+  RENT_AND_UTILITIES_RENT: "housing",
+  RENT_AND_UTILITIES_GAS_AND_ELECTRICITY: "utilities",
+  RENT_AND_UTILITIES_INTERNET_AND_CABLE: "utilities",
+  RENT_AND_UTILITIES_TELEPHONE: "utilities",
+  RENT_AND_UTILITIES_WATER: "utilities",
+  RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT: "utilities",
+  RENT_AND_UTILITIES_OTHER_UTILITIES: "utilities",
+
+  LOAN_PAYMENTS_MORTGAGE_PAYMENT: "housing",
+  LOAN_PAYMENTS_CREDIT_CARD_PAYMENT: "debt_payment",
+  LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT: "debt_payment",
+  LOAN_PAYMENTS_CAR_PAYMENT: "debt_payment",
+  LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT: "debt_payment",
+  LOAN_PAYMENTS_OTHER_PAYMENT: "debt_payment",
+
+  TRANSFER_OUT_SAVINGS: "savings",
+  TRANSFER_IN_SAVINGS: "savings",
+  TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS: "investing",
+  TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS: "investing",
+  TRANSFER_IN_DEPOSIT: "income",
+  TRANSFER_OUT_ACCOUNT_TRANSFER: "transfer",
+  TRANSFER_IN_ACCOUNT_TRANSFER: "transfer",
+  TRANSFER_OUT_WITHDRAWAL: "transfer",
+  TRANSFER_IN_CASH_ADVANCES_AND_LOANS: "transfer",
+  TRANSFER_OUT_OTHER_TRANSFER_OUT: "transfer",
+  TRANSFER_IN_OTHER_TRANSFER_IN: "transfer",
+
+  INCOME_WAGES: "income",
+  INCOME_DIVIDENDS: "income",
+  INCOME_INTEREST_EARNED: "income",
+  INCOME_RETIREMENT_PENSION: "income",
+  INCOME_TAX_REFUND: "income",
+  INCOME_UNEMPLOYMENT: "income",
+  INCOME_OTHER_INCOME: "income",
+
+  MEDICAL_PRIMARY_CARE: "health",
+  MEDICAL_DENTAL_CARE: "health",
+  MEDICAL_EYE_CARE: "health",
+  MEDICAL_NURSING_CARE: "health",
+  MEDICAL_PHARMACIES_AND_SUPPLEMENTS: "health",
+  MEDICAL_VETERINARY_SERVICES: "health",
+  MEDICAL_OTHER_MEDICAL: "health",
+
+  GENERAL_SERVICES_INSURANCE: "insurance",
+  GENERAL_SERVICES_EDUCATION: "education",
+  GENERAL_SERVICES_AUTOMOTIVE: "transportation",
+  GENERAL_SERVICES_CHILDCARE: "miscellaneous",
+  GENERAL_SERVICES_CONSULTING_AND_LEGAL: "miscellaneous",
+  GENERAL_SERVICES_STORAGE: "miscellaneous",
+  GENERAL_SERVICES_OTHER_GENERAL_SERVICES: "miscellaneous",
+
+  ENTERTAINMENT_MUSIC_AND_AUDIO: "subscription",
+  ENTERTAINMENT_TV_AND_MOVIES: "subscription",
+  ENTERTAINMENT_MOVIES_AND_DVDS: "entertainment",
+  ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS: "entertainment",
+  ENTERTAINMENT_VIDEO_GAMES: "entertainment",
+  ENTERTAINMENT_OTHER_ENTERTAINMENT: "entertainment",
+
+  GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES: "gifts",
+  GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES: "shopping",
+  GENERAL_MERCHANDISE_ELECTRONICS: "shopping",
+  GENERAL_MERCHANDISE_SUPERSTORES: "shopping",
+  GENERAL_MERCHANDISE_DEPARTMENT_STORES: "shopping",
+  GENERAL_MERCHANDISE_ONLINE_MARKETPLACES: "shopping",
+  GENERAL_MERCHANDISE_DISCOUNT_STORES: "shopping",
+  GENERAL_MERCHANDISE_PET_SUPPLIES: "shopping",
+  GENERAL_MERCHANDISE_SPORTING_GOODS: "shopping",
+  GENERAL_MERCHANDISE_OFFICE_SUPPLIES: "shopping",
+  GENERAL_MERCHANDISE_CONVENIENCE_STORES: "shopping",
+  GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS: "shopping",
+  GENERAL_MERCHANDISE_TOBACCO_AND_VAPE: "shopping",
+  GENERAL_MERCHANDISE_GENERAL_MERCHANDISE: "shopping",
+  GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE: "shopping",
+
+  HOME_IMPROVEMENT_FURNITURE: "housing",
+  HOME_IMPROVEMENT_HARDWARE: "housing",
+  HOME_IMPROVEMENT_REPAIR_AND_MAINTENANCE: "housing",
+  HOME_IMPROVEMENT_SECURITY: "housing",
+  HOME_IMPROVEMENT_OTHER_HOME_IMPROVEMENT: "housing",
+
+  PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: "health",
+  PERSONAL_CARE_HAIR_AND_BEAUTY: "personal_care",
+  PERSONAL_CARE_LAUNDRY_AND_DRY_CLEANING: "personal_care",
+  PERSONAL_CARE_OTHER_PERSONAL_CARE: "personal_care",
+
+  BANK_FEES_INTEREST_CHARGE: "debt_payment",
+  BANK_FEES_ATM_FEES: "miscellaneous",
+  BANK_FEES_FOREIGN_TRANSACTION_FEES: "miscellaneous",
+  BANK_FEES_INSUFFICIENT_FUNDS: "miscellaneous",
+  BANK_FEES_OVERDRAFT_FEES: "miscellaneous",
+  BANK_FEES_OTHER_BANK_FEES: "miscellaneous",
+
+  GOVERNMENT_AND_NON_PROFIT_DONATIONS: "gifts",
+  GOVERNMENT_AND_NON_PROFIT_GOVERNMENT_DEPARTMENTS_AND_AGENCIES: "miscellaneous",
+  GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT: "miscellaneous",
+  GOVERNMENT_AND_NON_PROFIT_OTHER_GOVERNMENT_AND_NON_PROFIT: "miscellaneous",
+
+  OTHER_OTHER: "miscellaneous",
+};
+
+// `detailed` is Plaid's precise category (e.g. FOOD_AND_DRINK_FAST_FOOD vs
+// FOOD_AND_DRINK_GROCERIES) and should always be present when Plaid
+// returns a personal_finance_category at all. `legacyCategory` (the old
+// `category` array's first entry, a human-readable string like "Fast
+// Food") is only a fallback for the rare transaction with no PFC data —
+// checked most-specific-first so a broad substring like "payment" can't
+// swallow a more specific match the way the previous version did.
+export function mapCategory(detailed?: string | null, legacyCategory?: string | null): string {
+  if (detailed && DETAILED_CATEGORY_MAP[detailed]) return DETAILED_CATEGORY_MAP[detailed];
+
+  const c = (legacyCategory ?? "").toLowerCase();
+  if (!c) return "miscellaneous";
+  if (c.includes("fast food") || c.includes("restaurant") || c.includes("coffee") || c.includes("dining")) return "dining";
+  if (c.includes("grocer") || c.includes("supermarket")) return "groceries";
+  if (c.includes("airline") || c.includes("hotel") || c.includes("lodging") || c.includes("travel")) return "travel";
+  if (c.includes("transport") || c.includes("gas station") || c.includes("taxi") || c.includes("ride share") || c.includes("parking")) return "transportation";
+  if (c.includes("mortgage")) return "housing";
+  if (c.includes("rent")) return "housing";
+  if (c.includes("utilities") || c.includes("electric") || c.includes("water") || c.includes("internet") || c.includes("telephone")) return "utilities";
+  if (c.includes("loan") || c.includes("credit card payment")) return "debt_payment";
+  if (c.includes("payroll") || c.includes("deposit") || c.includes("interest earned")) return "income";
+  if (c.includes("transfer") || c.includes("withdrawal")) return "transfer";
   if (c.includes("subscription") || c.includes("streaming")) return "subscription";
-  if (c.includes("medical") || c.includes("health") || c.includes("pharmacy")) return "health";
-  if (c.includes("education") || c.includes("school")) return "education";
-  if (c.includes("entertainment") || c.includes("recreation")) return "entertainment";
-  if (c.includes("shopping") || c.includes("merchandise") || c.includes("clothing")) return "shopping";
-  if (c.includes("rent") || c.includes("mortgage") || c.includes("housing")) return "housing";
+  if (c.includes("pharmacy") || c.includes("medical") || c.includes("health") || c.includes("dental")) return "health";
+  if (c.includes("education") || c.includes("school") || c.includes("tuition")) return "education";
+  if (c.includes("entertainment") || c.includes("recreation") || c.includes("movie")) return "entertainment";
+  if (c.includes("clothing") || c.includes("merchandise") || c.includes("shopping")) return "shopping";
   if (c.includes("insurance")) return "insurance";
-  if (c.includes("loan") || c.includes("credit")) return "debt_payment";
   return "miscellaneous";
 }
 
@@ -59,7 +199,7 @@ export async function syncPlaidTransactions(
         date: t.date,
         merchant_name: t.merchant_name ?? t.name,
         description: t.name,
-        category: mapCategory(t.personal_finance_category?.primary ?? t.category?.[0] ?? ""),
+        category: mapCategory(t.personal_finance_category?.detailed, t.category?.[0]),
         is_income: t.amount < 0,
         is_pending: t.pending,
         tags: [],
