@@ -16,7 +16,8 @@ export async function GET() {
     .select("*")
     .eq("household_id", householdId)
     .eq("is_active", true)
-    .eq("include_in_net_worth", true);
+    .eq("include_in_net_worth", true)
+    .or(`owner_id.eq.${user.id},is_shared.eq.true`);
 
   const accountsByType: Record<string, typeof accounts> = {};
   let totalAssets = 0;

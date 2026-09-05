@@ -310,21 +310,31 @@ export default function SettingsPage() {
                                       </div>
                                       <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(Math.abs(acc.current_balance))}</p>
                                     </div>
-                                    <button
-                                      onClick={() => toggleShared(acc)}
-                                      className={cn(
-                                        "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
-                                        acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
-                                      )}
-                                    >
-                                      {acc.is_shared ? <><Eye size={12} />Shared</> : <><EyeOff size={12} />Private</>}
-                                    </button>
-                                    <button
-                                      onClick={() => disconnect(acc)}
-                                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
+                                    {acc.owner_id === user?.id ? (
+                                      <>
+                                        <button
+                                          onClick={() => toggleShared(acc)}
+                                          className={cn(
+                                            "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
+                                            acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
+                                          )}
+                                        >
+                                          {acc.is_shared ? <><Eye size={12} />Shared</> : <><EyeOff size={12} />Private</>}
+                                        </button>
+                                        <button
+                                          onClick={() => disconnect(acc)}
+                                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      // Only visible here because its owner shared it — not
+                                      // yours to toggle or disconnect.
+                                      <span className="badge bg-brand-50 text-brand-600 text-[10px] flex-shrink-0">
+                                        Partner&apos;s
+                                      </span>
+                                    )}
                                   </div>
                                 ))}
                               </div>

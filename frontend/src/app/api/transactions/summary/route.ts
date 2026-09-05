@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateHouseholdId } from "@/lib/supabase/household";
+import { getVisibleAccountIds } from "@/lib/supabase/accounts";
 
 export async function GET(req: Request) {
   const supabase = createClient();
@@ -10,6 +11,11 @@ export async function GET(req: Request) {
   const householdId = await getOrCreateHouseholdId(supabase, user.id);
   if (!householdId) return NextResponse.json({ total_spent: 0, total_income: 0, savings: 0, savings_rate: 0, by_category: [] });
 
+  const visibleAccountIds = await getVisibleAccountIds(supabase, householdId, user.id);
+  if (visibleAccountIds.length === 0) {
+    return NextResponse.json({ total_spent: 0, total_income: 0, savings: 0, savings_rate: 0, by_category: [] });
+  }
+
   const { searchParams } = new URL(req.url);
   const startDate = searchParams.get("start_date") ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
   const endDate = searchParams.get("end_date") ?? new Date().toISOString().slice(0, 10);
@@ -18,6 +24,7 @@ export async function GET(req: Request) {
     .from("transactions")
     .select("amount, category, is_income")
     .eq("household_id", householdId)
+    .in("account_id", visibleAccountIds)
     .eq("is_hidden", false)
     .eq("is_pending", false)
     .gte("date", startDate)

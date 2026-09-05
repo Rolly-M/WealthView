@@ -15,6 +15,7 @@ export async function GET() {
     .select("*")
     .eq("household_id", householdId)
     .eq("is_active", true)
+    .or(`owner_id.eq.${user.id},is_shared.eq.true`)
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getHouseholdId } from "@/lib/supabase/household";
+import { getVisibleAccountIds } from "@/lib/supabase/accounts";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -9,6 +10,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   const householdId = await getHouseholdId(supabase, user.id);
   if (!householdId) return NextResponse.json({ error: "No household" }, { status: 404 });
+
+  const visibleAccountIds = await getVisibleAccountIds(supabase, householdId, user.id);
 
   const { data: budget } = await supabase
     .from("budgets")
@@ -26,14 +29,17 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const lastDay = new Date(year, month, 0).getDate();
   const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-  const { data: txns } = await supabase
-    .from("transactions")
-    .select("amount, category")
-    .eq("household_id", budget.household_id)
-    .eq("is_hidden", false)
-    .eq("is_income", false)
-    .gte("date", startDate)
-    .lte("date", endDate);
+  const { data: txns } = visibleAccountIds.length === 0
+    ? { data: [] }
+    : await supabase
+        .from("transactions")
+        .select("amount, category")
+        .eq("household_id", budget.household_id)
+        .in("account_id", visibleAccountIds)
+        .eq("is_hidden", false)
+        .eq("is_income", false)
+        .gte("date", startDate)
+        .lte("date", endDate);
 
   let totalSpent = 0;
   const spentByCategory: Record<string, number> = {};

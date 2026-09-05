@@ -14,11 +14,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const allowed = ["name", "current_balance", "available_balance", "is_shared", "include_in_net_worth"];
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 
+  // Only the owner can edit their own account — a household_id match alone
+  // let any member (including toggling is_shared on a partner's account
+  // they aren't even supposed to know exists) edit or reshare it without
+  // the owner's consent.
   const { data, error } = await supabase
     .from("accounts")
     .update(updates)
     .eq("id", params.id)
     .eq("household_id", householdId)
+    .eq("owner_id", user.id)
     .select()
     .single();
 
@@ -34,11 +39,13 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const householdId = await getHouseholdId(supabase, user.id);
   if (!householdId) return NextResponse.json({ error: "No household" }, { status: 404 });
 
+  // Only the owner can disconnect their own account.
   const { error } = await supabase
     .from("accounts")
     .update({ is_active: false })
     .eq("id", params.id)
-    .eq("household_id", householdId);
+    .eq("household_id", householdId)
+    .eq("owner_id", user.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 

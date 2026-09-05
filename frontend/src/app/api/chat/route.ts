@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateHouseholdId } from "@/lib/supabase/household";
+import { getVisibleAccountIds } from "@/lib/supabase/accounts";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -16,10 +17,18 @@ export async function POST(req: Request) {
   const { message, thread_id } = await req.json();
   if (!message?.trim()) return NextResponse.json({ error: "Message required" }, { status: 400 });
 
+  // A private account (and its transactions) must not leak into the other
+  // partner's chat context just because Claude has household-wide access.
+  const visibleAccountIds = await getVisibleAccountIds(supabase, hid, user.id);
+
   // Fetch financial context in parallel
   const [accountsRes, txnRes, budgetsRes, goalsRes] = await Promise.all([
-    supabase.from("accounts").select("name, type, current_balance, currency").eq("household_id", hid).eq("is_active", true),
-    supabase.from("transactions").select("date, merchant_name, description, amount, category, is_income").eq("household_id", hid).eq("is_hidden", false).order("date", { ascending: false }).limit(60),
+    visibleAccountIds.length === 0
+      ? { data: [] }
+      : supabase.from("accounts").select("name, type, current_balance, currency").eq("household_id", hid).eq("is_active", true).in("id", visibleAccountIds),
+    visibleAccountIds.length === 0
+      ? { data: [] }
+      : supabase.from("transactions").select("date, merchant_name, description, amount, category, is_income").eq("household_id", hid).in("account_id", visibleAccountIds).eq("is_hidden", false).order("date", { ascending: false }).limit(60),
     supabase.from("budgets").select("name, total_amount, budget_categories(category, amount)").eq("household_id", hid).eq("is_active", true),
     supabase.from("goals").select("name, type, target_amount, current_amount, status").eq("household_id", hid).eq("status", "active"),
   ]);
