@@ -15,6 +15,7 @@ function InviteForm({ token }: { token: string }) {
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [sessionEmail, setSessionEmail] = useState<string | null | undefined>(undefined); // undefined = still checking
 
   useEffect(() => {
     householdsApi
@@ -23,6 +24,28 @@ function InviteForm({ token }: { token: string }) {
       .catch(() => setPreviewError(true))
       .finally(() => setPreviewLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => setSessionEmail(data.session?.user.email ?? null));
+  }, []);
+
+  async function acceptAsLoggedInUser() {
+    setLoading(true);
+    setError("");
+    try {
+      const acceptRes = await fetch(`/api/households/invite/${token}`, { method: "POST" });
+      if (!acceptRes.ok) {
+        const body = await acceptRes.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to join household");
+      }
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      setError((err as Error)?.message ?? "Failed to accept invitation");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleGoogle() {
     const supabase = createClient();
@@ -46,24 +69,45 @@ function InviteForm({ token }: { token: string }) {
     try {
       const supabase = createClient();
 
-      // Create Supabase account
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: preview.email,
         password: form.password,
         options: { data: { full_name: form.full_name } },
       });
-      if (signUpError) throw new Error(signUpError.message);
 
-      // Fire-and-forget our own branded verification email either way — it
-      // works even when Supabase's own "Confirm email" is on and withheld
-      // the session, since we pass the id signUp() just gave us.
-      fetch("/api/auth/send-verification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: signUpData.user?.id }),
-      }).catch(() => {});
+      let session = signUpData.session;
 
-      if (!signUpData.session) {
+      if (signUpError) {
+        if (!signUpError.message.toLowerCase().includes("already registered")) {
+          throw new Error(signUpError.message);
+        }
+        // An account for this email already exists — most likely from an
+        // earlier attempt at this same invite (e.g. one that got stuck on
+        // Supabase's own email confirmation before it was accepted). Try
+        // signing in with what was just typed instead of dead-ending on
+        // Supabase's generic "already registered" error.
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: preview.email,
+          password: form.password,
+        });
+        if (signInError) {
+          throw new Error(
+            "An account already exists for this email. Try logging in with its password instead, or use \"Forgot password\" on the login page."
+          );
+        }
+        session = signInData.session;
+      } else {
+        // Fire-and-forget our own branded verification email either way —
+        // it works even when Supabase's own "Confirm email" is on and
+        // withheld the session, since we pass the id signUp() just gave us.
+        fetch("/api/auth/send-verification", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: signUpData.user?.id }),
+        }).catch(() => {});
+      }
+
+      if (!session) {
         // Email confirmation required — no session yet, so the invite can't
         // be accepted until the user confirms and comes back to this link.
         setNeedsConfirmation(true);
@@ -113,6 +157,47 @@ function InviteForm({ token }: { token: string }) {
           This invite link is no longer valid. Ask your partner to send a new one.
         </p>
         <Link href="/login" className="btn-secondary">Go to login</Link>
+      </div>
+    );
+  }
+
+  // Already logged in (e.g. came back after logging in with an account
+  // created by an earlier attempt at this same invite) — just accept it
+  // directly instead of routing through the signup/signin form at all.
+  if (sessionEmail !== undefined && sessionEmail !== null) {
+    const matches = sessionEmail.toLowerCase() === preview.email?.toLowerCase();
+    return (
+      <div className="card shadow-card-lg text-center">
+        <div className="text-3xl mb-2">🤝</div>
+        <h2 className="text-base font-semibold text-gray-900 mb-1">
+          Join {preview.household_name ?? "the household"}?
+        </h2>
+        {error && (
+          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm my-3 text-left">{error}</div>
+        )}
+        {matches ? (
+          <>
+            <p className="text-sm text-gray-500 mb-4">
+              You&apos;re logged in as <strong>{sessionEmail}</strong>.
+            </p>
+            <button onClick={acceptAsLoggedInUser} disabled={loading} className="btn-primary w-full">
+              {loading ? "Joining…" : "Accept invitation"}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-gray-500 mb-4">
+              This invite is for <strong>{preview.email}</strong>, but you&apos;re logged in as{" "}
+              <strong>{sessionEmail}</strong>. Log out and open this link again to accept it with the right account.
+            </p>
+            <button
+              onClick={async () => { await createClient().auth.signOut(); location.reload(); }}
+              className="btn-secondary w-full"
+            >
+              Log out
+            </button>
+          </>
+        )}
       </div>
     );
   }
@@ -167,6 +252,9 @@ function InviteForm({ token }: { token: string }) {
 
       <p className="mt-4 text-xs text-gray-400 text-center leading-relaxed">
         You&apos;ll have your own separate login. Your partner controls what is shared with you.
+      </p>
+      <p className="mt-2 text-xs text-gray-400 text-center">
+        Already have an account? <Link href="/login" className="text-brand-600 hover:underline">Log in</Link>, then open this invite link again.
       </p>
     </div>
   );

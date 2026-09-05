@@ -16,7 +16,10 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const token = randomBytes(32).toString("hex");
+  // base64url instead of hex roughly halves the link length for the same
+  // entropy (12 chars vs 64) — plenty given invites are also gated by an
+  // exact email match, single-use status, and a 7-day expiry.
+  const token = randomBytes(9).toString("base64url");
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const { data, error } = await supabase
