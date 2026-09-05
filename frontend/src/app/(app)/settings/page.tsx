@@ -798,7 +798,7 @@ function EmailVerificationStatus({ user }: { user: User | null }) {
       const res = await fetch("/api/auth/send-verification", { method: "POST" });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error ?? "Failed to send verification email");
-      setStatus(d.sent ? "Verification email sent — check your inbox." : "Couldn't send the email right now, try again shortly.");
+      setStatus(d.sent ? "Verification email sent — check your inbox." : (d.error ?? "Couldn't send the email right now, try again shortly."));
     } catch (err: unknown) {
       setStatus((err as Error)?.message ?? "Something went wrong");
     } finally {

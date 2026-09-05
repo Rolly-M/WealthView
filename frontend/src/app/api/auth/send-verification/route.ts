@@ -60,11 +60,11 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email/${token}`;
-  const { sent } = await sendEmail({
+  const { sent, error: sendError } = await sendEmail({
     to: user.email,
     subject: "Confirm your email — WealthView Duo",
     html: verificationEmailHtml({ fullName: profile?.full_name ?? "there", verifyUrl }),
   });
 
-  return NextResponse.json({ sent });
+  return NextResponse.json({ sent, error: sendError });
 }
