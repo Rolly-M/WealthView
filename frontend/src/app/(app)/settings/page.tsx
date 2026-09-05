@@ -144,6 +144,7 @@ export default function SettingsPage() {
   const [expandedInviteId, setExpandedInviteId] = useState<string | null>(null);
   const [appOrigin, setAppOrigin] = useState("");
   const [selectedBankKey, setSelectedBankKey] = useState("");
+  const [visibilityBankLabel, setVisibilityBankLabel] = useState("");
 
   useEffect(() => { setAppOrigin(window.location.origin); }, []);
 
@@ -495,32 +496,40 @@ export default function SettingsPage() {
                 if (myAccounts.length === 0) {
                   return <p className="text-xs text-gray-400">No accounts linked yet.</p>;
                 }
+                const bankGroups = groupAccounts(myAccounts, null).flatMap(([, banks]) => banks);
+                const active = bankGroups.find(([label]) => label === visibilityBankLabel) ?? bankGroups[0];
+
                 return (
-                  <div className="space-y-3">
-                    {groupAccounts(myAccounts, null).map(([, banks]) =>
-                      banks.map(([bankLabel, bankAccounts]) => (
-                        <div key={bankLabel}>
-                          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
-                            <Building2 size={11} />{bankLabel}
+                  <div>
+                    <select
+                      className="input !py-2 !text-xs mb-3"
+                      value={active?.[0] ?? ""}
+                      onChange={(e) => setVisibilityBankLabel(e.target.value)}
+                    >
+                      {bankGroups.map(([bankLabel, bankAccounts]) => (
+                        <option key={bankLabel} value={bankLabel}>
+                          {bankLabel} · {bankAccounts.length} account{bankAccounts.length === 1 ? "" : "s"}
+                        </option>
+                      ))}
+                    </select>
+
+                    {active && (
+                      <div className="space-y-1.5">
+                        {active[1].map((acc) => (
+                          <div key={acc.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white border border-gray-100">
+                            <span className="text-xs text-gray-700 truncate">{acc.name}</span>
+                            <button
+                              onClick={() => toggleShared(acc)}
+                              className={cn(
+                                "flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border transition-all flex-shrink-0",
+                                acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
+                              )}
+                            >
+                              {acc.is_shared ? <><Eye size={11} />Shared</> : <><EyeOff size={11} />Private</>}
+                            </button>
                           </div>
-                          <div className="space-y-1.5">
-                            {bankAccounts.map((acc) => (
-                              <div key={acc.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white border border-gray-100">
-                                <span className="text-xs text-gray-700 truncate">{acc.name}</span>
-                                <button
-                                  onClick={() => toggleShared(acc)}
-                                  className={cn(
-                                    "flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border transition-all flex-shrink-0",
-                                    acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
-                                  )}
-                                >
-                                  {acc.is_shared ? <><Eye size={11} />Shared</> : <><EyeOff size={11} />Private</>}
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))
+                        ))}
+                      </div>
                     )}
                   </div>
                 );
