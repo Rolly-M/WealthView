@@ -82,6 +82,56 @@ export function verificationEmailHtml(params: { fullName: string; verifyUrl: str
 </html>`.trim();
 }
 
+export function passwordResetEmailHtml(params: { resetUrl: string }) {
+  const { resetUrl } = params;
+  return `
+<!DOCTYPE html>
+<html>
+  <body style="margin:0;padding:0;background-color:#f6f4f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f6f4f1;padding:40px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
+            <tr>
+              <td style="padding:32px 40px 0 40px;text-align:center;">
+                <span style="font-size:22px;font-weight:800;color:#3d2c1f;">WealthView</span>
+                <span style="font-size:13px;font-weight:700;color:#a8763e;background-color:#f9ede1;padding:3px 10px;border-radius:999px;margin-left:6px;">Duo</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px 40px 8px 40px;text-align:center;">
+                <div style="font-size:36px;margin-bottom:12px;">🔒</div>
+                <h1 style="margin:0 0 8px 0;font-size:20px;font-weight:700;color:#1f2937;">
+                  Reset your password
+                </h1>
+                <p style="margin:0;font-size:14px;line-height:1.6;color:#6b7280;">
+                  Click below to choose a new password for your WealthView Duo account.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 40px 8px 40px;text-align:center;">
+                <a href="${resetUrl}" style="display:inline-block;background-color:#a8763e;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 28px;border-radius:12px;">
+                  Reset password
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 40px 32px 40px;text-align:center;">
+                <p style="margin:0;font-size:12px;color:#9ca3af;">
+                  This link expires in 1 hour. If you didn't request this, you can safely ignore this email — your password won't be changed.
+                </p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:20px 0 0 0;font-size:11px;color:#b0aaa2;">WealthView Duo</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`.trim();
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

@@ -1,27 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 
 export default function ResetPasswordPage() {
+  const { token } = useParams<{ token: string }>();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    // Supabase's password-reset link lands here having already exchanged
-    // itself for a "recovery" session via the auth client's own detection
-    // of the URL fragment — just confirm a session actually exists before
-    // letting the form render, since a stale/reused link leaves none.
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => setReady(!!data.session));
-  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,11 +21,17 @@ export default function ResetPasswordPage() {
     setLoading(true);
     setError("");
     try {
-      const supabase = createClient();
-      const { error: updateError } = await supabase.auth.updateUser({ password });
-      if (updateError) throw new Error(updateError.message);
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error ?? "Failed to reset password");
+      }
       setDone(true);
-      setTimeout(() => router.push("/dashboard"), 2000);
+      setTimeout(() => router.push("/login"), 2500);
     } catch (err: unknown) {
       setError((err as Error)?.message ?? "Failed to reset password");
     } finally {
@@ -57,19 +53,20 @@ export default function ResetPasswordPage() {
           {done ? (
             <div className="text-center">
               <div className="text-4xl mb-3">✅</div>
-              <p className="text-sm text-gray-600">Password updated — taking you to your dashboard…</p>
-            </div>
-          ) : !ready ? (
-            <div className="text-center">
-              <p className="text-sm text-gray-500 mb-4">
-                This reset link is invalid or has expired.
-              </p>
-              <Link href="/forgot-password" className="btn-secondary inline-flex">Request a new link</Link>
+              <p className="text-sm text-gray-600">Password updated — taking you to the login page…</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+                  {error}
+                  {(error.includes("expired") || error.includes("already been used") || error.includes("Invalid")) && (
+                    <>
+                      {" "}
+                      <Link href="/forgot-password" className="underline font-medium">Request a new link</Link>.
+                    </>
+                  )}
+                </div>
               )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">New password</label>

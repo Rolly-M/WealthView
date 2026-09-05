@@ -40,11 +40,11 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/invite") ||
     pathname.startsWith("/verify-email") ||
     pathname.startsWith("/forgot-password") ||
-    // Not folded into isAuthRoute deliberately — Supabase's password-reset
-    // link signs the browser into a real ("recovery") session before it
-    // ever reaches this page, so treating it as an auth route would bounce
-    // an already-authenticated visitor straight to /dashboard before they
-    // could ever see the reset form.
+    // Not folded into isAuthRoute deliberately — this is a standalone,
+    // token-gated action (custom flow, bypasses Supabase's own
+    // resetPasswordForEmail/session-based recovery) rather than something
+    // tied to the visitor's current auth state, so it should stay
+    // reachable regardless of whether they're currently logged in.
     pathname.startsWith("/reset-password") ||
     isAuthRoute ||
     isMfaChallengeRoute ||
