@@ -10,7 +10,7 @@ function InviteForm({ token }: { token: string }) {
   const router = useRouter();
   const [preview, setPreview] = useState<{ email?: string; household_name?: string } | null>(null);
   const [previewError, setPreviewError] = useState(false);
-  const [form, setForm] = useState({ full_name: "", password: "", confirm: "" });
+  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(true);
@@ -62,7 +62,6 @@ function InviteForm({ token }: { token: string }) {
     e.preventDefault();
     if (form.password !== form.confirm) { setError("Passwords don't match"); return; }
     if (form.password.length < 8) { setError("Password must be at least 8 characters"); return; }
-    if (!preview?.email) return;
 
     setLoading(true);
     setError("");
@@ -70,7 +69,7 @@ function InviteForm({ token }: { token: string }) {
       const supabase = createClient();
 
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: preview.email,
+        email: form.email,
         password: form.password,
         options: { data: { full_name: form.full_name } },
       });
@@ -87,7 +86,7 @@ function InviteForm({ token }: { token: string }) {
         // signing in with what was just typed instead of dead-ending on
         // Supabase's generic "already registered" error.
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: preview.email,
+          email: form.email,
           password: form.password,
         });
         if (signInError) {
@@ -140,7 +139,7 @@ function InviteForm({ token }: { token: string }) {
         <div className="text-5xl mb-4">📬</div>
         <h1 className="text-xl font-bold text-gray-900 mb-2">Check your email</h1>
         <p className="text-sm text-gray-500 mb-4">
-          We sent a confirmation link to <strong>{preview?.email}</strong>. Click it to
+          We sent a confirmation link to <strong>{form.email}</strong>. Click it to
           activate your account, then come back to this invite link to finish joining.
         </p>
         <Link href="/login" className="btn-secondary">Go to login</Link>
@@ -164,40 +163,30 @@ function InviteForm({ token }: { token: string }) {
   // Already logged in (e.g. came back after logging in with an account
   // created by an earlier attempt at this same invite) — just accept it
   // directly instead of routing through the signup/signin form at all.
+  // The server still enforces a match for the older invite style that
+  // does address a specific email — its error surfaces here as-is.
   if (sessionEmail !== undefined && sessionEmail !== null) {
-    const matches = sessionEmail.toLowerCase() === preview.email?.toLowerCase();
     return (
       <div className="card shadow-card-lg text-center">
         <div className="text-3xl mb-2">🤝</div>
         <h2 className="text-base font-semibold text-gray-900 mb-1">
           Join {preview.household_name ?? "the household"}?
         </h2>
+        <p className="text-sm text-gray-500 mb-4">
+          You&apos;re logged in as <strong>{sessionEmail}</strong>.
+        </p>
         {error && (
-          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm my-3 text-left">{error}</div>
+          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm mb-4 text-left">{error}</div>
         )}
-        {matches ? (
-          <>
-            <p className="text-sm text-gray-500 mb-4">
-              You&apos;re logged in as <strong>{sessionEmail}</strong>.
-            </p>
-            <button onClick={acceptAsLoggedInUser} disabled={loading} className="btn-primary w-full">
-              {loading ? "Joining…" : "Accept invitation"}
-            </button>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-gray-500 mb-4">
-              This invite is for <strong>{preview.email}</strong>, but you&apos;re logged in as{" "}
-              <strong>{sessionEmail}</strong>. Log out and open this link again to accept it with the right account.
-            </p>
-            <button
-              onClick={async () => { await createClient().auth.signOut(); location.reload(); }}
-              className="btn-secondary w-full"
-            >
-              Log out
-            </button>
-          </>
-        )}
+        <button onClick={acceptAsLoggedInUser} disabled={loading} className="btn-primary w-full">
+          {loading ? "Joining…" : "Accept invitation"}
+        </button>
+        <button
+          onClick={async () => { await createClient().auth.signOut(); location.reload(); }}
+          className="mt-2 text-xs text-gray-400 hover:underline"
+        >
+          Not you? Log out
+        </button>
       </div>
     );
   }
@@ -210,7 +199,9 @@ function InviteForm({ token }: { token: string }) {
         <p className="text-sm text-gray-500 mt-1">
           Join <strong>{preview.household_name ?? "your household"}</strong> on WealthView Duo.
         </p>
-        <p className="text-xs text-brand-700 font-medium mt-2">{preview.email}</p>
+        {preview.email && (
+          <p className="text-xs text-brand-700 font-medium mt-2">{preview.email}</p>
+        )}
       </div>
 
       <button
@@ -236,6 +227,10 @@ function InviteForm({ token }: { token: string }) {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Your name</label>
           <input type="text" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Jordan Johnson" className="input" required autoFocus />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Your email</label>
+          <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="jordan@example.com" className="input" required />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Create a password</label>

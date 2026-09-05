@@ -138,7 +138,6 @@ export default function SettingsPage() {
   const [household, setHousehold] = useState<Household | null>(null);
   const [tab, setTab] = useState<"accounts" | "household" | "profile" | "privacy">("accounts");
   const [loading, setLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
   const [inviteStatus, setInviteStatus] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
@@ -183,15 +182,13 @@ export default function SettingsPage() {
     load();
   }
 
-  async function sendInvite(e: React.FormEvent) {
-    e.preventDefault();
+  async function generateInvite() {
     setInviting(true);
     setInviteStatus("");
     setInviteUrl("");
     try {
-      const { data } = await householdsApi.invite({ email: inviteEmail, role: "editor" });
+      const { data } = await householdsApi.invite({ role: "editor" });
       setInviteUrl(data.invite_url);
-      setInviteEmail("");
       load();
     } catch (err: unknown) {
       setInviteStatus("Failed: " + ((err as Error)?.message ?? "Unknown error"));
@@ -404,22 +401,12 @@ export default function SettingsPage() {
                   </div>
                 ) : (
                   <>
-                    <form onSubmit={sendInvite} className="flex gap-2">
-                      <input
-                        type="email"
-                        placeholder="partner@example.com"
-                        value={inviteEmail}
-                        onChange={(e) => setInviteEmail(e.target.value)}
-                        className="input flex-1"
-                        required
-                      />
-                      <button type="submit" disabled={inviting} className="btn-primary flex-shrink-0">
-                        <UserPlus size={15} />
-                        {inviting ? "Creating…" : "Invite"}
-                      </button>
-                    </form>
+                    <button onClick={generateInvite} disabled={inviting} className="btn-primary">
+                      <UserPlus size={15} />
+                      {inviting ? "Creating…" : "Generate invite link"}
+                    </button>
                     <p className="text-xs text-gray-400 mt-2">
-                      You&apos;ll get a link valid for 7 days to share with them however you like — email, text, or WhatsApp.
+                      Valid for 7 days. Share it however you like — email, text, or WhatsApp — whoever opens it and signs up joins your household.
                     </p>
                   </>
                 )}
@@ -433,7 +420,7 @@ export default function SettingsPage() {
                     {household.pending_invitations.map((inv) => (
                       <div key={inv.id} className="rounded-lg bg-amber-50 border border-amber-100 overflow-hidden">
                         <div className="flex items-center justify-between gap-2 p-2">
-                          <span className="text-xs text-amber-800 truncate">{inv.email}</span>
+                          <span className="text-xs text-amber-800 truncate">{inv.email || "Open invite link"}</span>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <span className="badge bg-amber-100 text-amber-700 text-[10px]">Pending</span>
                             <button

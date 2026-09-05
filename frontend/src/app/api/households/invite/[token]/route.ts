@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(
   _req: Request,
@@ -30,7 +31,13 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: invite } = await supabase
+  // Admin client (bypasses RLS) rather than the caller's own session —
+  // matches /api/auth/callback's Google path, and sidesteps the same class
+  // of "RLS policy silently returns no row" failure mode found there
+  // instead of relying on invitations_select_own_email being satisfied.
+  const admin = createAdminClient();
+
+  const { data: invite } = await admin
     .from("invitations")
     .select("*")
     .eq("token", params.token)
@@ -44,18 +51,20 @@ export async function POST(
     return NextResponse.json({ error: "Invitation has expired" }, { status: 410 });
   }
 
-  if (invite.email.toLowerCase() !== user.email?.toLowerCase()) {
+  // Invites are open shareable links by default (no target email) — only
+  // enforce a match for the older style that does address one.
+  if (invite.email && invite.email.toLowerCase() !== user.email?.toLowerCase()) {
     return NextResponse.json(
       { error: "This invitation was sent to a different email address" },
       { status: 403 }
     );
   }
 
-  await supabase
+  await admin
     .from("household_members")
     .insert({ household_id: invite.household_id, user_id: user.id, role: invite.role });
 
-  await supabase
+  await admin
     .from("invitations")
     .update({ status: "accepted", accepted_at: new Date().toISOString() })
     .eq("id", invite.id);

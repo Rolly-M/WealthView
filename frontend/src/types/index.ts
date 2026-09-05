@@ -38,7 +38,7 @@ export interface HouseholdMember {
 
 export interface Invitation {
   id: string;
-  email: string;
+  email: string | null;
   role: string;
   status: "pending" | "accepted" | "declined" | "expired";
   token: string;

@@ -15,10 +15,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
   }
 
-  const body = await req.json();
+  // No email required — this is a plain shareable link now (text, email,
+  // WhatsApp, whatever); whoever opens it and signs up joins the
+  // household. Still accepts an optional email for anyone who wants to
+  // address it, kept working exactly as before if provided.
+  const body = await req.json().catch(() => ({}));
   // base64url instead of hex roughly halves the link length for the same
-  // entropy (12 chars vs 64) — plenty given invites are also gated by an
-  // exact email match, single-use status, and a 7-day expiry.
+  // entropy (12 chars vs 64) — plenty given invites are also gated by
+  // single-use status and a 7-day expiry.
   const token = randomBytes(9).toString("base64url");
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -27,7 +31,7 @@ export async function POST(req: Request) {
     .insert({
       household_id: membership.household_id,
       inviter_id: user.id,
-      email: body.email,
+      email: body.email ?? null,
       role: body.role ?? "editor",
       token,
       status: "pending",

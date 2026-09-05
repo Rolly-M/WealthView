@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrCreateHouseholdId } from "@/lib/supabase/household";
 import { NextResponse } from "next/server";
 
@@ -16,8 +17,17 @@ export async function GET(request: Request) {
       // Signing up via the invite-accept page's Google button — join the
       // specific household the invite is for, instead of the generic
       // first-time-OAuth-user path below auto-creating a brand new one.
+      // Uses the admin client (bypasses RLS) rather than the just-minted
+      // user-scoped session — the invitations SELECT policy depends on the
+      // JWT's email claim being visible to Postgres at query time, which
+      // isn't guaranteed to have propagated yet immediately after
+      // exchangeCodeForSession in the same request. When that SELECT
+      // silently returned no row, `valid` was always false and this fell
+      // through to auto-creating a brand new household instead of joining
+      // the invited one — every single time, not intermittently.
       if (inviteToken) {
-        const { data: invite } = await supabase
+        const admin = createAdminClient();
+        const { data: invite } = await admin
           .from("invitations")
           .select("*")
           .eq("token", inviteToken)
@@ -27,13 +37,13 @@ export async function GET(request: Request) {
           invite &&
           invite.status === "pending" &&
           new Date(invite.expires_at) >= new Date() &&
-          invite.email.toLowerCase() === data.user.email?.toLowerCase();
+          (!invite.email || invite.email.toLowerCase() === data.user.email?.toLowerCase());
 
         if (valid) {
-          await supabase
+          await admin
             .from("household_members")
             .insert({ household_id: invite.household_id, user_id: data.user.id, role: invite.role });
-          await supabase
+          await admin
             .from("invitations")
             .update({ status: "accepted", accepted_at: new Date().toISOString() })
             .eq("id", invite.id);
@@ -42,9 +52,11 @@ export async function GET(request: Request) {
           // email/password invite path.
           return NextResponse.redirect(`${origin}/mfa-setup`);
         }
-        // Invalid/expired/mismatched invite — fall through to the normal
-        // first-time-user path below rather than leaving the account in no
-        // household at all.
+        // Invalid/expired/mismatched invite — still give the account a
+        // household so it isn't left in a broken state, but flag it
+        // instead of silently doing the wrong thing.
+        await getOrCreateHouseholdId(supabase, data.user.id);
+        return NextResponse.redirect(`${origin}/dashboard?error=invite_invalid`);
       }
 
       // Auto-create a household for first-time OAuth users
