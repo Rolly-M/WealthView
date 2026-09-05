@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   LayoutDashboard, ArrowLeftRight, Target, PieChart,
-  Lightbulb, MessageSquare, TrendingUp, Settings, LogOut,
+  Lightbulb, MessageSquare, TrendingUp, Settings, LogOut, Menu, X,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, isAuthenticated, loading, initialize, clearAuth } = useAuthStore();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const unsub = initialize();
@@ -33,6 +34,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!loading && !isAuthenticated) router.replace("/login");
   }, [loading, isAuthenticated, router]);
+
+  // Close the mobile drawer on every navigation instead of leaving it open
+  // over the new page.
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
 
   if (loading || !isAuthenticated) return null;
 
@@ -46,11 +51,46 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-surface">
-      <aside className="fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-100 flex flex-col z-30 shadow-sm">
-        <div className="px-6 py-5 border-b border-gray-100">
+      {/* Mobile top bar — the sidebar is off-canvas below lg, so this is the
+          only way to reach navigation on a phone-width iOS PWA. Padded for
+          the safe-area inset so it clears the notch/status bar. */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-100 flex items-center justify-between px-4 pb-2.5 pt-[calc(0.625rem_+_env(safe-area-inset-top))]">
+        <Link href="/dashboard">
+          <img src="/logo.svg" alt="WealthView Duo" height={24} style={{ height: 24, width: "auto" }} />
+        </Link>
+        <button
+          onClick={() => setMenuOpen(true)}
+          className="p-2 -mr-2 rounded-lg text-gray-500 hover:bg-gray-50"
+          aria-label="Open menu"
+        >
+          <Menu size={22} />
+        </button>
+      </header>
+
+      {/* Backdrop — mobile only, closes the drawer on outside tap */}
+      {menuOpen && (
+        <div
+          onClick={() => setMenuOpen(false)}
+          className="lg:hidden fixed inset-0 bg-black/30 z-40"
+        />
+      )}
+
+      <aside className={cn(
+        "fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-100 flex flex-col z-50 shadow-sm",
+        "transition-transform duration-200 lg:translate-x-0",
+        menuOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between pt-[calc(1.25rem_+_env(safe-area-inset-top))]">
           <Link href="/dashboard">
             <img src="/logo.svg" alt="WealthView Duo" height={28} style={{ height: 28, width: "auto" }} />
           </Link>
+          <button
+            onClick={() => setMenuOpen(false)}
+            className="lg:hidden p-1 rounded-lg text-gray-400 hover:bg-gray-50"
+            aria-label="Close menu"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
@@ -75,7 +115,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <button onClick={handleSignOut} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 transition-all">
             <LogOut size={18} /> Sign out
           </button>
-          <div className="flex items-center gap-3 px-3 py-3 mt-2 rounded-xl bg-gray-50">
+          <div className="flex items-center gap-3 px-3 py-3 mt-2 rounded-xl bg-gray-50 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]">
             <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
               {initials}
             </div>
@@ -87,8 +127,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex-1 pl-64">
-        <main className="min-h-screen p-8 max-w-7xl mx-auto animate-fade-in">
+      <div className="flex-1 lg:pl-64">
+        <main className="min-h-screen p-4 pt-[calc(4rem_+_env(safe-area-inset-top))] lg:p-8 max-w-7xl mx-auto animate-fade-in">
           {children}
         </main>
       </div>

@@ -39,6 +39,11 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#0d9488",
+  // Lets the page draw under the iOS status bar / home indicator so
+  // env(safe-area-inset-*) resolves to real values instead of 0 — without
+  // this, the standalone PWA's mobile header and drawer can't account for
+  // the notch/home-indicator area at all.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
