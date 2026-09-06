@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building2, AlertTriangle, Copy, Check, Mail, MessageCircle, LayoutDashboard } from "lucide-react";
+import { Plus, Trash2, Link2, UserPlus, Shield, Eye, EyeOff, RefreshCw, Building2, AlertTriangle, Copy, Check, Mail, MessageCircle, LayoutDashboard, ChevronDown, ChevronRight } from "lucide-react";
 import { accountsApi, householdsApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 import { formatCurrency, formatSignedCurrency, cn, groupAccounts, ALL_OWNERS_KEY } from "@/lib/utils";
@@ -143,8 +143,16 @@ export default function SettingsPage() {
   const [inviteUrl, setInviteUrl] = useState("");
   const [expandedInviteId, setExpandedInviteId] = useState<string | null>(null);
   const [appOrigin, setAppOrigin] = useState("");
-  const [selectedBankKey, setSelectedBankKey] = useState("");
-  const [visibilityBankLabel, setVisibilityBankLabel] = useState("");
+  const [expandedBankKeys, setExpandedBankKeys] = useState<Set<string>>(new Set());
+  const [expandedVisibilityBank, setExpandedVisibilityBank] = useState<string | null>(null);
+
+  function toggleBankExpanded(key: string) {
+    setExpandedBankKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => { setAppOrigin(window.location.origin); }, []);
 
@@ -264,97 +272,95 @@ export default function SettingsPage() {
                   accounts: bankAccounts,
                 }))
               );
-              const active = bankGroups.find((g) => g.key === selectedBankKey) ?? bankGroups[0];
-              const netBalance = active
-                ? active.accounts.reduce((sum, a) => {
-                    const isLiability = a.type === "credit" || a.type === "loan" || a.type === "mortgage";
-                    return sum + (isLiability ? -Math.abs(a.current_balance) : a.current_balance);
-                  }, 0)
-                : 0;
 
               return (
-                <div>
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
-                    <Building2 size={12} /> Select a bank
-                  </div>
-                  <select
-                    className="input mb-4"
-                    value={active?.key ?? ""}
-                    onChange={(e) => setSelectedBankKey(e.target.value)}
-                  >
-                    {bankGroups.map((g) => (
-                      <option key={g.key} value={g.key}>
-                        {g.label} · {g.accounts.length} account{g.accounts.length === 1 ? "" : "s"}
-                      </option>
-                    ))}
-                  </select>
-
-                  {active && (
-                    <>
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-semibold text-gray-900">{active.label}</p>
-                        <p className="text-sm font-semibold text-gray-600 tabular">{formatSignedCurrency(netBalance)}</p>
-                      </div>
-                      <div className="space-y-2">
-                        {active.accounts.map((acc) => (
-                          <div key={acc.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-sm text-gray-900">{acc.name}</p>
-                                <span className={cn(
-                                  "badge text-[10px]",
-                                  acc.type === "checking" ? "bg-blue-100 text-blue-700" :
-                                  acc.type === "savings" ? "bg-emerald-100 text-emerald-700" :
-                                  acc.type === "credit" ? "bg-amber-100 text-amber-700" :
-                                  "bg-gray-100 text-gray-600"
-                                )}>{acc.type}</span>
-                                {acc.provider === "plaid" && (
-                                  <span className="badge bg-teal-50 text-teal-700 text-[10px]">Live</span>
+                <div className="space-y-2">
+                  {bankGroups.map((g) => {
+                    const expanded = expandedBankKeys.has(g.key);
+                    const netBalance = g.accounts.reduce((sum, a) => {
+                      const isLiability = a.type === "credit" || a.type === "loan" || a.type === "mortgage";
+                      return sum + (isLiability ? -Math.abs(a.current_balance) : a.current_balance);
+                    }, 0);
+                    return (
+                      <div key={g.key} className="rounded-xl border border-gray-100 overflow-hidden">
+                        <button
+                          onClick={() => toggleBankExpanded(g.key)}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-700">
+                            {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                            <Building2 size={12} />{g.label}
+                            <span className="text-gray-400 font-normal">
+                              · {g.accounts.length} account{g.accounts.length === 1 ? "" : "s"}
+                            </span>
+                          </div>
+                          <span className="text-xs font-semibold text-gray-600 tabular">
+                            {formatSignedCurrency(netBalance)}
+                          </span>
+                        </button>
+                        {expanded && (
+                          <div className="space-y-2 p-2">
+                            {g.accounts.map((acc) => (
+                              <div key={acc.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-sm text-gray-900">{acc.name}</p>
+                                    <span className={cn(
+                                      "badge text-[10px]",
+                                      acc.type === "checking" ? "bg-blue-100 text-blue-700" :
+                                      acc.type === "savings" ? "bg-emerald-100 text-emerald-700" :
+                                      acc.type === "credit" ? "bg-amber-100 text-amber-700" :
+                                      "bg-gray-100 text-gray-600"
+                                    )}>{acc.type}</span>
+                                    {acc.provider === "plaid" && (
+                                      <span className="badge bg-teal-50 text-teal-700 text-[10px]">Live</span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(Math.abs(acc.current_balance))}</p>
+                                </div>
+                                {acc.owner_id === user?.id ? (
+                                  <>
+                                    <button
+                                      onClick={() => toggleDashboardVisible(acc)}
+                                      className={cn(
+                                        "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
+                                        acc.include_in_net_worth ? "border-gray-200 text-gray-600 bg-white" : "border-amber-200 text-amber-700 bg-amber-50"
+                                      )}
+                                      title={acc.include_in_net_worth ? "Shown on your dashboard and net worth" : "Hidden from your dashboard and net worth"}
+                                    >
+                                      {acc.include_in_net_worth ? <><LayoutDashboard size={12} />On dashboard</> : <><EyeOff size={12} />Hidden</>}
+                                    </button>
+                                    <button
+                                      onClick={() => toggleShared(acc)}
+                                      className={cn(
+                                        "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
+                                        acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
+                                      )}
+                                      title={acc.is_shared ? "Your partner can see this account" : "Only you can see this account"}
+                                    >
+                                      {acc.is_shared ? <><Eye size={12} />Shared</> : <><EyeOff size={12} />Private</>}
+                                    </button>
+                                    <button
+                                      onClick={() => disconnect(acc)}
+                                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </>
+                                ) : (
+                                  // Only visible here because its owner shared it — not
+                                  // yours to toggle or disconnect.
+                                  <span className="badge bg-brand-50 text-brand-600 text-[10px] flex-shrink-0">
+                                    Partner&apos;s
+                                  </span>
                                 )}
                               </div>
-                              <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(Math.abs(acc.current_balance))}</p>
-                            </div>
-                            {acc.owner_id === user?.id ? (
-                              <>
-                                <button
-                                  onClick={() => toggleDashboardVisible(acc)}
-                                  className={cn(
-                                    "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
-                                    acc.include_in_net_worth ? "border-gray-200 text-gray-600 bg-white" : "border-amber-200 text-amber-700 bg-amber-50"
-                                  )}
-                                  title={acc.include_in_net_worth ? "Shown on your dashboard and net worth" : "Hidden from your dashboard and net worth"}
-                                >
-                                  {acc.include_in_net_worth ? <><LayoutDashboard size={12} />On dashboard</> : <><EyeOff size={12} />Hidden</>}
-                                </button>
-                                <button
-                                  onClick={() => toggleShared(acc)}
-                                  className={cn(
-                                    "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all",
-                                    acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
-                                  )}
-                                  title={acc.is_shared ? "Your partner can see this account" : "Only you can see this account"}
-                                >
-                                  {acc.is_shared ? <><Eye size={12} />Shared</> : <><EyeOff size={12} />Private</>}
-                                </button>
-                                <button
-                                  onClick={() => disconnect(acc)}
-                                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </>
-                            ) : (
-                              // Only visible here because its owner shared it — not
-                              // yours to toggle or disconnect.
-                              <span className="badge bg-brand-50 text-brand-600 text-[10px] flex-shrink-0">
-                                Partner&apos;s
-                              </span>
-                            )}
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
-                    </>
-                  )}
+                    );
+                  })}
                 </div>
               );
             })()}
@@ -497,40 +503,46 @@ export default function SettingsPage() {
                   return <p className="text-xs text-gray-400">No accounts linked yet.</p>;
                 }
                 const bankGroups = groupAccounts(myAccounts, null).flatMap(([, banks]) => banks);
-                const active = bankGroups.find(([label]) => label === visibilityBankLabel) ?? bankGroups[0];
 
                 return (
-                  <div>
-                    <select
-                      className="input !py-2 !text-xs mb-3"
-                      value={active?.[0] ?? ""}
-                      onChange={(e) => setVisibilityBankLabel(e.target.value)}
-                    >
-                      {bankGroups.map(([bankLabel, bankAccounts]) => (
-                        <option key={bankLabel} value={bankLabel}>
-                          {bankLabel} · {bankAccounts.length} account{bankAccounts.length === 1 ? "" : "s"}
-                        </option>
-                      ))}
-                    </select>
-
-                    {active && (
-                      <div className="space-y-1.5">
-                        {active[1].map((acc) => (
-                          <div key={acc.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white border border-gray-100">
-                            <span className="text-xs text-gray-700 truncate">{acc.name}</span>
-                            <button
-                              onClick={() => toggleShared(acc)}
-                              className={cn(
-                                "flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border transition-all flex-shrink-0",
-                                acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
-                              )}
-                            >
-                              {acc.is_shared ? <><Eye size={11} />Shared</> : <><EyeOff size={11} />Private</>}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <div className="space-y-2">
+                    {bankGroups.map(([bankLabel, bankAccounts]) => {
+                      const expanded = expandedVisibilityBank === bankLabel;
+                      return (
+                        <div key={bankLabel} className="rounded-lg border border-gray-100 overflow-hidden bg-white">
+                          <button
+                            onClick={() => setExpandedVisibilityBank(expanded ? null : bankLabel)}
+                            className="w-full flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-gray-50 transition-colors"
+                          >
+                            <span className="flex items-center gap-1.5 text-xs font-medium text-gray-700">
+                              {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                              <Building2 size={11} />{bankLabel}
+                              <span className="text-gray-400 font-normal">
+                                · {bankAccounts.length} account{bankAccounts.length === 1 ? "" : "s"}
+                              </span>
+                            </span>
+                          </button>
+                          {expanded && (
+                            <div className="space-y-1.5 p-2 pt-0">
+                              {bankAccounts.map((acc) => (
+                                <div key={acc.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100">
+                                  <span className="text-xs text-gray-700 truncate">{acc.name}</span>
+                                  <button
+                                    onClick={() => toggleShared(acc)}
+                                    className={cn(
+                                      "flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border transition-all flex-shrink-0",
+                                      acc.is_shared ? "border-brand-200 text-brand-700 bg-brand-50" : "border-gray-200 text-gray-500 bg-white"
+                                    )}
+                                  >
+                                    {acc.is_shared ? <><Eye size={11} />Shared</> : <><EyeOff size={11} />Private</>}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })()}
